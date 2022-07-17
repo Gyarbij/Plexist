@@ -7,7 +7,7 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 * Creates new playlist in Plex when they're added to your streaming service.
 
 ## What it does NOT do:
-* Steal shit
+* Steal Shit!
 
 ## User Requirements
 ### Plex
@@ -27,3 +27,19 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 OR
 * Get playlists IDs of playlists you want to sync
   *  Example: https://www.deezer.com/en/playlist/10484834882 - 10484834882 is the playlist ID
+
+## Installation
+
+Concise installation steps:
+```Bash
+git clone https://github.com/Gyarbij/Plexist.git
+cd Plexist
+pip3 install -r requirements.txt
+python3 plexist.py
+```
+## Docker Deployment
+
+
+## Contributing
+
+Refer to [contributor documentation](CONTRIBUTING.md).

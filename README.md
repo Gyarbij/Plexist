@@ -1,6 +1,10 @@
 # Plexist
 Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Deezer playlist in Plex (because Plex music playlist are a croc of tihs)
 
+<p align="center">
+  <img src="./assets/plexist.png" width="802" />
+</p>
+
 ## What it does:
 
 * Recreates your streaming playlist within Plex, using files you already have in your library.

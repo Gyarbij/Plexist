@@ -10,6 +10,6 @@ RUN pip install -r requirements.txt
 COPY . .
 WORKDIR /app
 
-CMD ["python", "./plexist/sync.py"]
+CMD ["python", "./plexist/plexist.py"]
 
 # docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t gyarbij/plexist:<tag> --push .

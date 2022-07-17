@@ -3,7 +3,7 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 
 ## What it does:
 
-* Recreates your streaming playlist within Plex, using files your already have in your library.
+* Recreates your streaming playlist within Plex, using files you already have in your library.
 * Keeps created playlist in sync with the streaming service.
 * Creates new playlist in Plex when they're added to your streaming service.
 
@@ -18,7 +18,7 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 * Plex token - [Instructions here](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
 
 ### Spotify
-* Spotify client ID and client secret - Can be obtained from [spotify developer](https://developer.spotify.com/dashboard/login)
+* Spotify client ID and client secret - Can be obtained from [Spotify developer](https://developer.spotify.com/dashboard/login)
 * Spotify user ID - This can be found on  your [Spotify account page](https://www.spotify.com/nl/account/overview/)
 
 ### Deezer
@@ -34,7 +34,7 @@ OR
 ## Installation
 
 The below will only run once unless you create a cronjob, etc. Docker is the recommended deployment method.
-One time run installation steps:
+One-time run installation steps:
 ```Bash
 git clone https://github.com/Gyarbij/Plexist.git
 cd Plexist
@@ -71,9 +71,37 @@ docker run -d \
 ```
 #### Notes
 - Include `http://` in the PLEX_URL
-- Remove comments (eg: `# Optional x`) before running 
+- Remove comments (e.g.  `# Optional x`) before running 
 
 ### Docker Compose
+
+docker-compose.yml can be configured as follows. See [docker-compose-example.yml](https://github.com/rnagabhyrava/plex-playlist-sync/blob/main/docker-compose-example.yml) for example
+```
+version: '3.8'
+services:
+  plexist:
+    container_name: plexist
+    image: gyarbij/plexist:latest
+    environment:
+      - PLEX_URL= <your local plex url>
+      - PLEX_TOKEN=<your plex token>
+      - WRITE_MISSING_AS_CSV=<1 or 0> # Default 0, 1 = writes missing tracks from each playlist to a csv
+      - ADD_PLAYLIST_POSTER=<1 or 0> # Default 1, 1 = add poster for each playlist
+      - ADD_PLAYLIST_DESCRIPTION=<1 or 0> # Default 1, 1 = add description for each playlist
+      - APPEND_INSTEAD_OF_SYNC=0 # Default 0, 1 = Sync tracks, 0 = Append only
+      - SECONDS_TO_WAIT=84000
+      - SPOTIFY_CLIENT_ID=<your spotify client id>
+      - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
+      - SPOTIFY_USER_ID=<your spotify user id>
+      - DEEZER_USER_ID=<your spotify user id>
+      - DEEZER_PLAYLIST_ID= #<deezer playlist ids space seperated>
+    restart: unless-stopped
+
+```
+And run with :
+```
+docker-compose up
+```
 
 ## Contributing
 

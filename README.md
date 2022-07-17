@@ -33,13 +33,15 @@ OR
 
 ## Installation
 
-Concise installation steps:
+The below will only run once unless you create a cronjob, etc. Docker is the recommended deployment method.
+One time run installation steps:
 ```Bash
 git clone https://github.com/Gyarbij/Plexist.git
 cd Plexist
 pip3 install -r requirements.txt
 python3 plexist.py
 ```
+
 ## Docker Deployment
 
 You can run the image via docker run or docker-compose, choice is yours. Images are available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/tags) for arm64 and amd64 (armv7 will come).

@@ -79,7 +79,10 @@ docker run -d \
 
 ### Docker Compose
 
-docker-compose.yml can be configured as follows. See [docker-compose-example.yml](https://github.com/rnagabhyrava/plex-playlist-sync/blob/main/docker-compose-example.yml) for example
+docker-compose.yml should be configured per the below. 
+
+A template is Here: [docker-compose.yml](https://github.com/gyarbij/plexist/blob/main/assets/docker-compose.yml)
+
 ```
 version: '3.8'
 services:
@@ -97,7 +100,7 @@ services:
       - SPOTIFY_CLIENT_ID=<your spotify client id>
       - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
       - SPOTIFY_USER_ID=<your spotify user id>
-      - DEEZER_USER_ID=<your spotify user id>
+      - DEEZER_USER_ID=<deezer user id>
       - DEEZER_PLAYLIST_ID= #<deezer playlist ids space seperated>
     restart: unless-stopped
 

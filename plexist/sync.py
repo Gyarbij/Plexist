@@ -7,9 +7,9 @@ import spotipy
 from plexapi.server import PlexServer
 from spotipy.oauth2 import SpotifyClientCredentials
 
-from utils.deezer import deezer_playlist_sync
-from utils.helperClasses import UserInputs
-from utils.spotify import spotify_playlist_sync
+from modules.deezer import deezer_playlist_sync
+from modules.helperClasses import UserInputs
+from modules.spotify import spotify_playlist_sync
 
 # Read ENV variables
 userInputs = UserInputs(

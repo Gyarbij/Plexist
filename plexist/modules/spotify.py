@@ -28,7 +28,7 @@ def _get_sp_user_playlists(
             playlists.append(
                 Playlist(
                     id=playlist["uri"],
-                    name=playlist["name"] + suffix,
+                    name=playlist["name"],
                     description=playlist.get("description", ""),
                     # playlists may not have a poster in such cases return ""
                     poster=""
@@ -65,13 +65,23 @@ def _get_sp_tracks_from_playlist(
     sp_playlist_tracks = sp.user_playlist_tracks(user_id, playlist.id)
 
     # Only processes first 100 tracks
-    tracks = list(map(extract_sp_track_metadata, sp_playlist_tracks["items"]))
+    tracks = list(
+        map(
+            extract_sp_track_metadata,
+            [i for i in sp_playlist_tracks["items"] if i.get("track")],
+        )
+    )
 
     # If playlist contains more than 100 tracks this loop is useful
     while sp_playlist_tracks["next"]:
         sp_playlist_tracks = sp.next(sp_playlist_tracks)
         tracks.extend(
-            list(map(extract_sp_track_metadata, sp_playlist_tracks["items"]))
+            list(
+                map(
+                    extract_sp_track_metadata,
+                    [i for i in sp_playlist_tracks["items"] if i.get("track")],
+                )
+            )
         )
     return tracks
 

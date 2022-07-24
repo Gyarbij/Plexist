@@ -58,7 +58,7 @@ def _get_dz_playlists(
             playlists.append(
                 Playlist(
                     id=d["id"],
-                    name=d["title"] + suffix,
+                    name=d["title"],
                     description=d.get("description", ""),
                     poster=d.get("picture_big", ""),
                 )

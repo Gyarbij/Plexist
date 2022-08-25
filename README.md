@@ -48,7 +48,7 @@ python3 plexist.py
 
 ## Docker Deployment
 
-You can run the image via docker run or docker-compose, choice is yours. Images are available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/tags) for arm64 and amd64 (armv7 will come).
+You can run the image via docker run or docker-compose, choice is yours. Multi-Platform mages are available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/).
 
 Configure the parameters as required. Plex URL and TOKEN are mandatory and the options for your respective streaming service.
 

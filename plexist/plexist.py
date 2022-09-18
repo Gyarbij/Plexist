@@ -1,3 +1,5 @@
+#!/bin/sh
+
 import logging
 import os
 import time

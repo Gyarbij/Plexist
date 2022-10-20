@@ -1,3 +1,5 @@
+[![CodeQL](https://github.com/Gyarbij/Plexist/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/codeql-analysis.yml) [![DockerHub](https://github.com/Gyarbij/Plexist/actions/workflows/image.yml/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/image.yml)
+
 # Plexist
 Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Deezer playlist in Plex (because Plex music playlist are a croc of tihs)
 

@@ -1,5 +1,5 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3.8-slim
+# Base image: https://hub.docker.com/_/python
+FROM python:3.11.1-slim
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -18,7 +18,7 @@ COPY . /app
 RUN adduser -u 5678 --disabled-password --gecos "" plexist && chown -R plexist /app
 USER plexist
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
+# During debugging, this entry point will be overridden.
 CMD ["python", "plexist/plexist.py"]
 
 # docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t gyarbij/plexist:<tag> --push .

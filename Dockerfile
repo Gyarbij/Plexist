@@ -1,5 +1,5 @@
 # Base image: https://hub.docker.com/_/python
-FROM python:3.11.1-slim
+FROM python:3.11.2-slim
 
 # Prevents Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1

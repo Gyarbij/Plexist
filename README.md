@@ -81,7 +81,7 @@ docker run -d \
 
 ### Docker Compose
 
-docker-compose.yml should be configured per the below. 
+docker-compose.yml should be configured per the below, if you don't user Spotify you can remove the Spotify variables and vice versa for Deezer. 
 
 A template is Here: [docker-compose.yml](https://github.com/gyarbij/plexist/blob/main/assets/docker-compose.yml)
 

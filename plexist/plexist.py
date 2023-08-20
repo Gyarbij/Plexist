@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import logging
 import os
 import time
@@ -11,75 +13,87 @@ from modules.deezer import deezer_playlist_sync
 from modules.helperClasses import UserInputs
 from modules.spotify import spotify_playlist_sync
 
-# Read ENV variables
-userInputs = UserInputs(
-    plex_url=os.getenv("PLEX_URL"),
-    plex_token=os.getenv("PLEX_TOKEN"),
-    write_missing_as_csv=os.getenv("WRITE_MISSING_AS_CSV", "0") == "1",
-    add_playlist_poster=os.getenv("ADD_PLAYLIST_POSTER", "1") == "1",
-    add_playlist_description=os.getenv("ADD_PLAYLIST_DESCRIPTION", "1") == "1",
-    append_instead_of_sync=os.getenv("APPEND_INSTEAD_OF_SYNC", False) == "1",
-    wait_seconds=int(os.getenv("SECONDS_TO_WAIT", 86400)),
-    spotipy_client_id=os.getenv("SPOTIFY_CLIENT_ID"),
-    spotipy_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-    spotify_user_id=os.getenv("SPOTIFY_USER_ID"),
-    deezer_user_id=os.getenv("DEEZER_USER_ID"),
-    deezer_playlist_ids=os.getenv("DEEZER_PLAYLIST_ID"),
-)
-while True:
-    logging.info("Starting playlist sync")
 
-    if userInputs.plex_url and userInputs.plex_token:
+def read_environment_variables():
+    return UserInputs(
+        plex_url=os.getenv("PLEX_URL"),
+        plex_token=os.getenv("PLEX_TOKEN"),
+        write_missing_as_csv=os.getenv("WRITE_MISSING_AS_CSV", "0") == "1",
+        add_playlist_poster=os.getenv("ADD_PLAYLIST_POSTER", "1") == "1",
+        add_playlist_description=os.getenv("ADD_PLAYLIST_DESCRIPTION", "1") == "1",
+        append_instead_of_sync=os.getenv("APPEND_INSTEAD_OF_SYNC", "False") == "1",
+        wait_seconds=int(os.getenv("SECONDS_TO_WAIT", 86400)),
+        spotipy_client_id=os.getenv("SPOTIFY_CLIENT_ID"),
+        spotipy_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+        spotify_user_id=os.getenv("SPOTIFY_USER_ID"),
+        deezer_user_id=os.getenv("DEEZER_USER_ID"),
+        deezer_playlist_ids=os.getenv("DEEZER_PLAYLIST_ID"),
+    )
+
+
+def initialize_plex_server(user_inputs):
+    if user_inputs.plex_url and user_inputs.plex_token:
         try:
-            plex = PlexServer(userInputs.plex_url, userInputs.plex_token)
-        except:
-            logging.error("Plex Authorization error")
-            break
+            return PlexServer(user_inputs.plex_url, user_inputs.plex_token)
+        except Exception as e:
+            logging.error(f"Plex Authorization error: {e}")
+            return None
     else:
         logging.error("Missing Plex Authorization Variables")
-        break
+        return None
 
-    ########## SPOTIFY SYNC ##########
 
-    logging.info("Starting Spotify playlist sync")
-
-    SP_AUTHSUCCESS = False
-
+def initialize_spotify_client(user_inputs):
     if (
-        userInputs.spotipy_client_id
-        and userInputs.spotipy_client_secret
-        and userInputs.spotify_user_id
+        user_inputs.spotipy_client_id
+        and user_inputs.spotipy_client_secret
+        and user_inputs.spotify_user_id
     ):
         try:
-            sp = spotipy.Spotify(
+            return spotipy.Spotify(
                 auth_manager=SpotifyClientCredentials(
-                    userInputs.spotipy_client_id,
-                    userInputs.spotipy_client_secret,
+                    user_inputs.spotipy_client_id,
+                    user_inputs.spotipy_client_secret,
                 )
             )
-            SP_AUTHSUCCESS = True
-        except:
-            logging.info("Spotify Authorization error, skipping spotify sync")
-
+        except Exception as e:
+            logging.error(f"Spotify Authorization error: {e}")
+            return None
     else:
-        logging.info(
-            "Missing one or more Spotify Authorization Variables, skipping"
-            " spotify sync"
-        )
+        logging.error("Missing one or more Spotify Authorization Variables")
+        return None
 
-    if SP_AUTHSUCCESS:
-        spotify_playlist_sync(sp, plex, userInputs)
 
-    logging.info("Spotify playlist sync complete")
+def main():
+    user_inputs = read_environment_variables()
+    plex = initialize_plex_server(user_inputs)
 
-    ########## DEEZER SYNC ##########
+    if plex is None:
+        return
 
-    logging.info("Starting Deezer playlist sync")
-    dz = deezer.Client()
-    deezer_playlist_sync(dz, plex, userInputs)
-    logging.info("Deezer playlist sync complete")
+    while True:
+        logging.info("Starting playlist sync")
 
-    logging.info("All playlist(s) sync complete")
-    logging.info("sleeping for %s seconds" % userInputs.wait_seconds)
+        # Spotify sync
+        logging.info("Starting Spotify playlist sync")
+        sp = initialize_spotify_client(user_inputs)
+        if sp is not None:
+            spotify_playlist_sync(sp, plex, user_inputs)
+            logging.info("Spotify playlist sync complete")
+        else:
+            logging.error("Spotify sync skipped due to authorization error")
 
-    time.sleep(userInputs.wait_seconds)
+        # Deezer sync
+        logging.info("Starting Deezer playlist sync")
+        dz = deezer.Client()
+        deezer_playlist_sync(dz, plex, user_inputs)
+        logging.info("Deezer playlist sync complete")
+
+        logging.info("All playlist(s) sync complete")
+        logging.info(f"Sleeping for {user_inputs.wait_seconds} seconds")
+
+        time.sleep(user_inputs.wait_seconds)
+
+
+if __name__ == "__main__":
+    main()

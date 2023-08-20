@@ -2,3 +2,4 @@ fuzzywuzzy
 spotipy
 plexapi
 deezer-python
+python-levenshtein

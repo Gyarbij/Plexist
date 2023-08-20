@@ -12,6 +12,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from modules.deezer import deezer_playlist_sync
 from modules.helperClasses import UserInputs
 from modules.spotify import spotify_playlist_sync
+from modules.plex import initialize_db  # Importing the database initialization function
 
 
 def read_environment_variables():
@@ -65,6 +66,8 @@ def initialize_spotify_client(user_inputs):
 
 
 def main():
+    initialize_db()  # Initialize the database at the start of the main function
+
     user_inputs = read_environment_variables()
     plex = initialize_plex_server(user_inputs)
 

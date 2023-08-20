@@ -1,18 +1,60 @@
-import csv
+import sqlite3
 import logging
 import pathlib
 import sys
 from difflib import SequenceMatcher
 from typing import List
-
+from concurrent.futures import ThreadPoolExecutor
 import plexapi
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
-from fuzzywuzzy import fuzz
 
 from .helperClasses import Playlist, Track, UserInputs
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
+# Database functions
+def initialize_db():
+    conn = sqlite3.connect('matched_songs.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS matched_songs (
+        title TEXT,
+        artist TEXT,
+        album TEXT,
+        plex_id INTEGER
+    )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+def insert_matched_song(title, artist, album, plex_id):
+    conn = sqlite3.connect('matched_songs.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+    INSERT INTO matched_songs (title, artist, album, plex_id)
+    VALUES (?, ?, ?, ?)
+    ''', (title, artist, album, plex_id))
+
+    conn.commit()
+    conn.close()
+
+def get_matched_song(title, artist, album):
+    conn = sqlite3.connect('matched_songs.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+    SELECT plex_id FROM matched_songs
+    WHERE title = ? AND artist = ? AND album = ?
+    ''', (title, artist, album))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result[0] if result else None
 
 
 def _write_csv(tracks: List[Track], name: str, path: str = "/data") -> None:
@@ -35,38 +77,52 @@ def _delete_csv(name: str, path: str = "/data") -> None:
     file.unlink()
 
 
+from concurrent.futures import ThreadPoolExecutor
+
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
-    plex_tracks, missing_tracks = [], []
-    for track in tracks:
-        search = []
-        try:
-            # Combine track title, artist, and album for a more refined search
-            search_query = f"{track.title} {track.artist} {track.album}"
-            search = plex.search(search_query, mediatype="track", limit=5)
-        except BadRequest:
-            logging.info("failed to search %s on plex", track.title)
+    with ThreadPoolExecutor() as executor:
+        results = list(executor.map(lambda track: _match_single_track(plex, track), tracks))
 
-        best_match = None
-        best_score = 0
-
-        for s in search:
-            artist_similarity = SequenceMatcher(None, s.artist().title.lower(), track.artist.lower()).quick_ratio()
-            title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()
-            album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()
-            
-            # Combine the three scores (you can adjust the weights as needed)
-            combined_score = (artist_similarity * 0.5) + (title_similarity * 0.3) + (album_similarity * 0.2)
-            
-            if combined_score > best_score:
-                best_score = combined_score
-                best_match = s
-
-        if best_match:
-            plex_tracks.extend(best_match)
-        else:
-            missing_tracks.append(track)
+    plex_tracks = [result[0] for result in results if result[0]]
+    missing_tracks = [result[1] for result in results if result[1]]
 
     return plex_tracks, missing_tracks
+
+def _match_single_track(plex, track):
+    # Check in local DB first
+    plex_id = get_matched_song(track.title, track.artist, track.album)
+    if plex_id:
+        return plex.fetchItem(plex_id), None
+
+    search = []
+    try:
+        # Combine track title, artist, and album for a more refined search
+        search_query = f"{track.title} {track.artist} {track.album}"
+        search = plex.search(search_query, mediatype="track", limit=5)
+    except BadRequest:
+        logging.info("failed to search %s on plex", track.title)
+
+    best_match = None
+    best_score = 0
+
+    for s in search:
+        artist_similarity = SequenceMatcher(None, s.artist().title.lower(), track.artist.lower()).quick_ratio()
+        title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()
+        album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()
+        
+        # Combine the three scores (you can adjust the weights as needed)
+        combined_score = (artist_similarity * 0.5) + (title_similarity * 0.3) + (album_similarity * 0.2)
+        
+        if combined_score > best_score:
+            best_score = combined_score
+            best_match = s
+
+    if best_match:
+        # Insert into the local DB
+        insert_matched_song(track.title, track.artist, track.album, best_match.ratingKey)
+        return best_match, None
+    else:
+        return None, track
 
 
 def _update_plex_playlist(

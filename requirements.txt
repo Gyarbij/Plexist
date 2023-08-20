@@ -1,5 +1,3 @@
-fuzzywuzzy
-spotipy
-plexapi
-deezer-python
-python-levenshtein
+spotipy=latest
+plexapi=latest
+deezer-python=latest

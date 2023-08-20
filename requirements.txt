@@ -1,5 +1,4 @@
 fuzzywuzzy
-levenshtein
 spotipy
 plexapi
 deezer-python

@@ -40,19 +40,22 @@ def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     for track in tracks:
         search = []
         try:
-            search = plex.search(track.title, mediatype="track", limit=5)
+            # Combine track title, artist, and album for a more refined search
+            search_query = f"{track.title} {track.artist} {track.album}"
+            search = plex.search(search_query, mediatype="track", limit=5)
         except BadRequest:
             logging.info("failed to search %s on plex", track.title)
 
         best_match = None
-        best_score = 70
+        best_score = 0
 
         for s in search:
-            artist_similarity = fuzz.ratio(s.artist().title.lower(), track.artist.lower())
-            title_similarity = fuzz.ratio(s.title.lower(), track.title.lower())
+            artist_similarity = SequenceMatcher(None, s.artist().title.lower(), track.artist.lower()).quick_ratio()
+            title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()
+            album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()
             
-            # Combine the two scores (you can adjust the weights as needed)
-            combined_score = (artist_similarity * 0.7) + (title_similarity * 0.3)
+            # Combine the three scores (you can adjust the weights as needed)
+            combined_score = (artist_similarity * 0.5) + (title_similarity * 0.3) + (album_similarity * 0.2)
             
             if combined_score > best_score:
                 best_score = combined_score

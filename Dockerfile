@@ -1,5 +1,5 @@
 # Base image: https://hub.docker.com/_/python
-FROM python:3.12-rc
+FROM python:3.12-rc-slim
 
 # Prevents Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install pip requirements
 COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
 COPY . /app

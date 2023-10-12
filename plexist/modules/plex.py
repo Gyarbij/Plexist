@@ -13,25 +13,25 @@ from .helperClasses import Playlist, Track, UserInputs
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
+# Get connection object globally
+conn = sqlite3.connect('matched_songs.db')
+
 # Database functions
 def initialize_db():
-    conn = sqlite3.connect('matched_songs.db')
     cursor = conn.cursor()
-
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS matched_songs (
         title TEXT,
         artist TEXT,
         album TEXT,
+        year INTEGER,
+        genre TEXT,
         plex_id INTEGER
     )
     ''')
-
     conn.commit()
-    conn.close()
 
 def insert_matched_song(title, artist, album, plex_id):
-    conn = sqlite3.connect('matched_songs.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -40,10 +40,8 @@ def insert_matched_song(title, artist, album, plex_id):
     ''', (title, artist, album, plex_id))
 
     conn.commit()
-    conn.close()
 
 def get_matched_song(title, artist, album):
-    conn = sqlite3.connect('matched_songs.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -52,7 +50,6 @@ def get_matched_song(title, artist, album):
     ''', (title, artist, album))
 
     result = cursor.fetchone()
-    conn.close()
 
     return result[0] if result else None
 
@@ -88,7 +85,9 @@ def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
 
     return plex_tracks, missing_tracks
 
-def _match_single_track(plex, track):
+MATCH_THRESHOLD = 0.8  # Set your own threshold
+
+def _match_single_track(plex, track, year=None, genre=None):
     # Check in local DB first
     plex_id = get_matched_song(track.title, track.artist, track.album)
     if plex_id:
@@ -100,7 +99,7 @@ def _match_single_track(plex, track):
         search_query = f"{track.title} {track.artist} {track.album}"
         search = plex.search(search_query, mediatype="track", limit=5)
     except BadRequest:
-        logging.info("failed to search %s on plex", track.title)
+        logging.info("Failed to search %s on Plex", track.title)
 
     best_match = None
     best_score = 0
@@ -109,19 +108,22 @@ def _match_single_track(plex, track):
         artist_similarity = SequenceMatcher(None, s.artist().title.lower(), track.artist.lower()).quick_ratio()
         title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()
         album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()
-        
-        # Combine the three scores (you can adjust the weights as needed)
-        combined_score = (artist_similarity * 0.5) + (title_similarity * 0.3) + (album_similarity * 0.2)
+        year_similarity = 1 if year and s.year == year else 0
+        genre_similarity = SequenceMatcher(None, s.genre.lower(), genre.lower()).quick_ratio() if genre else 0
+
+        # Combine the scores (you can adjust the weights as needed)
+        combined_score = (artist_similarity * 0.4) + (title_similarity * 0.3) + (album_similarity * 0.2) + (year_similarity * 0.05) + (genre_similarity * 0.05)
         
         if combined_score > best_score:
             best_score = combined_score
             best_match = s
 
-    if best_match:
+    if best_match and best_score >= MATCH_THRESHOLD:
         # Insert into the local DB
         insert_matched_song(track.title, track.artist, track.album, best_match.ratingKey)
         return best_match, None
     else:
+        logging.info(f"No match found for track {track.title} by {track.artist} with a score of {best_score}.")
         return None, track
 
 
@@ -203,3 +205,6 @@ def update_or_create_plex_playlist(
                 "Failed to delete %s.csv, likely permission issue",
                 playlist.name,
             )
+
+def end_session():
+    conn.close()

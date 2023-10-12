@@ -71,12 +71,17 @@ def _get_sp_tracks_from_playlist(
 def spotify_playlist_sync(
     sp: spotipy.Spotify, plex: PlexServer, userInputs: UserInputs
 ) -> None:
-    playlists = _get_sp_user_playlists(sp, userInputs.spotify_user_id)
-    if playlists:
-        for playlist in playlists:
-            tracks = _get_sp_tracks_from_playlist(
-                sp, userInputs.spotify_user_id, playlist
-            )
-            update_or_create_plex_playlist(plex, playlist, tracks, userInputs)
-    else:
-        logging.error("No spotify playlists found for user provided")
+    try:
+        playlists = _get_sp_user_playlists(sp, userInputs.spotify_user_id)
+        if playlists:
+            for playlist in playlists:
+                logging.info(f"Syncing playlist: {playlist.name}")
+                tracks = _get_sp_tracks_from_playlist(
+                    sp, userInputs.spotify_user_id, playlist
+                )
+                # Pass additional metadata like year and genre if available
+                update_or_create_plex_playlist(plex, playlist, tracks, userInputs)
+        else:
+            logging.error("No Spotify playlists found for the user provided.")
+    except spotipy.SpotifyException as e:
+        logging.error(f"Spotify Exception: {e}")

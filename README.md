@@ -76,7 +76,7 @@ docker run -d \
 
 ```
 #### Notes
-- Include `http://` in the PLEX_URL
+- Include `http://` or `https://` in the PLEX_URL
 - Remove comments (e.g.  `# Optional x`) before running 
 
 ### Docker Compose

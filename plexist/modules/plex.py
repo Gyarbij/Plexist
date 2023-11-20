@@ -141,13 +141,16 @@ def _update_plex_playlist(
     return plex_playlist
 
 
-def update_or_create_plex_playlist(
-    plex: PlexServer,
-    playlist: Playlist,
-    tracks: List[Track],
-    userInputs: UserInputs,
-) -> None:
-    available_tracks, missing_tracks = _get_available_plex_tracks(plex, tracks)
+def update_or_create_plex_playlist(  
+    plex: PlexServer,  
+    playlist: Playlist,  
+    tracks: List[Track],  
+    userInputs: UserInputs,  
+) -> None:  
+    if tracks is None:  
+        logging.error("No tracks provided for playlist %s", playlist.name)  
+        return  
+    available_tracks, missing_tracks = _get_available_plex_tracks(plex, tracks)  
     if available_tracks:
         try:
             plex_playlist = _update_plex_playlist(

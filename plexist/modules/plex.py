@@ -8,15 +8,12 @@ from concurrent.futures import ThreadPoolExecutor
 import plexapi
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
-
 from .helperClasses import Playlist, Track, UserInputs
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-# Get connection object globally
 conn = sqlite3.connect('plexist.db')
 
-# Database functions
 def initialize_db():  
     conn = sqlite3.connect('plexist.db')  
     cursor = conn.cursor()  
@@ -59,7 +56,6 @@ def _write_csv(tracks: List[Track], name: str, path: str = "/data") -> None:
     data_folder = pathlib.Path(path)
     data_folder.mkdir(parents=True, exist_ok=True)
     file = data_folder / f"{name}.csv"
-
     with open(file, "w", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(Track.__annotations__.keys())
@@ -67,7 +63,6 @@ def _write_csv(tracks: List[Track], name: str, path: str = "/data") -> None:
             writer.writerow(
                 [track.title, track.artist, track.album, track.url]
             )
-
 
 def _delete_csv(name: str, path: str = "/data") -> None:
     data_folder = pathlib.Path(path)
@@ -80,47 +75,35 @@ from concurrent.futures import ThreadPoolExecutor
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     with ThreadPoolExecutor() as executor:
         results = list(executor.map(lambda track: _match_single_track(plex, track), tracks))
-
     plex_tracks = [result[0] for result in results if result[0]]
     missing_tracks = [result[1] for result in results if result[1]]
-
     return plex_tracks, missing_tracks
 
-MATCH_THRESHOLD = 0.8  # Set your own threshold
+MATCH_THRESHOLD = 0.6
 
 def _match_single_track(plex, track, year=None, genre=None):
-    # Check in local DB first
     plex_id = get_matched_song(track.title, track.artist, track.album)
     if plex_id:
         return plex.fetchItem(plex_id), None
-
     search = []
     try:
-        # Combine track title, artist, and album for a more refined search
         search_query = f"{track.title} {track.artist} {track.album}"
         search = plex.search(search_query, mediatype="track", limit=5)
     except BadRequest:
         logging.info("Failed to search %s on Plex", track.title)
-
     best_match = None
     best_score = 0
-
     for s in search:
         artist_similarity = SequenceMatcher(None, s.artist().title.lower(), track.artist.lower()).quick_ratio()
         title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()
         album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()
         year_similarity = 1 if year and s.year == year else 0
         genre_similarity = SequenceMatcher(None, s.genre.lower(), genre.lower()).quick_ratio() if genre else 0
-
-        # Combine the scores (you can adjust the weights as needed)
         combined_score = (artist_similarity * 0.4) + (title_similarity * 0.3) + (album_similarity * 0.2) + (year_similarity * 0.05) + (genre_similarity * 0.05)
-        
         if combined_score > best_score:
             best_score = combined_score
             best_match = s
-
     if best_match and best_score >= MATCH_THRESHOLD:
-        # Insert into the local DB
         insert_matched_song(track.title, track.artist, track.album, best_match.ratingKey)
         return best_match, None
     else:
@@ -164,7 +147,6 @@ def update_or_create_plex_playlist(
             plex.createPlaylist(title=playlist.name, items=available_tracks)
             logging.info("Created playlist %s", playlist.name)
             plex_playlist = plex.playlist(playlist.name)
-
         if playlist.description and userInputs.add_playlist_description:
             try:
                 plex_playlist.edit(summary=playlist.description)
@@ -183,7 +165,6 @@ def update_or_create_plex_playlist(
         logging.info(
             "Updated playlist %s with summary and poster", playlist.name
         )
-
     else:
         logging.info(
             "No songs for playlist %s were found on plex, skipping the"

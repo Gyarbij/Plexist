@@ -65,20 +65,22 @@ def _get_dz_playlists(
             )
     return playlists
 
-
-def _get_dz_tracks_from_playlist(
-    dz: deezer.Client(),
-    playlist: Playlist,
-) -> List[Track]:
-    """Return list of tracks with metadata.
-
-    Args:
-        dz (deezer.Client): Deezer Client (no credentials needed)
-        playlist (Playlist): Playlist object
-
-    Returns:
-        List[Track]: list of Track objects with track metadata fields
-    """
+def _get_dz_tracks_from_playlist(  
+    dz: deezer.Client(),  
+    playlist: Playlist,  
+) -> List[Track]:  
+    """Return list of tracks with metadata.  
+  
+    Args:  
+        dz (deezer.Client): Deezer Client (no credentials needed)  
+        playlist (Playlist): Playlist object  
+  
+    Returns:  
+        List[Track]: list of Track objects with track metadata fields  
+    """  
+    dz_playlist = dz.get_playlist(playlist.id)  
+    tracks = dz_playlist.get_tracks()  
+    return [extract_dz_track_metadata(track) for track in tracks]
 
 def extract_dz_track_metadata(track):
     track = track.as_dict()

@@ -81,35 +81,38 @@ def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
 
 MATCH_THRESHOLD = 0.6
 
-def _match_single_track(plex, track, year=None, genre=None):
-    plex_id = get_matched_song(track.title, track.artist, track.album)
-    if plex_id:
-        return plex.fetchItem(plex_id), None
-    search = []
-    try:
-        search_query = f"{track.title} {track.artist} {track.album}"
-        search = plex.search(search_query, mediatype="track", limit=5)
-    except BadRequest:
-        logging.info("Failed to search %s on Plex", track.title)
-    best_match = None
-    best_score = 0
-    for s in search:
-        artist_similarity = SequenceMatcher(None, s.artist().title.lower(), track.artist.lower()).quick_ratio()
-        title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()
-        album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()
-        year_similarity = 1 if year and s.year == year else 0
-        genre_similarity = SequenceMatcher(None, s.genre.lower(), genre.lower()).quick_ratio() if genre else 0
-        combined_score = (artist_similarity * 0.4) + (title_similarity * 0.3) + (album_similarity * 0.2) + (year_similarity * 0.05) + (genre_similarity * 0.05)
-        if combined_score > best_score:
-            best_score = combined_score
-            best_match = s
-    if best_match and best_score >= MATCH_THRESHOLD:
-        insert_matched_song(track.title, track.artist, track.album, best_match.ratingKey)
-        return best_match, None
-    else:
-        logging.info(f"No match found for track {track.title} by {track.artist} with a score of {best_score}.")
-        return None, track
-
+def _match_single_track(plex, track, year=None, genre=None):  
+    # Check in local DB first  
+    plex_id = get_matched_song(track.title, track.artist, track.album)  
+    if plex_id:  
+        return plex.fetchItem(plex_id), None  
+  
+    search = []  
+    try:  
+        # Combine track title and primary artist for a more refined search  
+        primary_artist = track.artist.split("&")[0].split("ft.")[0].strip()  # Get the primary artist  
+        search_query = f"{track.title} {primary_artist}"  
+        search = plex.search(search_query, mediatype="track", limit=5)  
+    except BadRequest:  
+        logging.info("Failed to search %s on Plex", track.title)  
+    best_match = None  
+    best_score = 0  
+    for s in search:  
+        artist_similarity = SequenceMatcher(None, s.artist().title.lower(), primary_artist.lower()).quick_ratio()  
+        title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()  
+        album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()  
+        year_similarity = 1 if year and s.year == year else 0  
+        genre_similarity = SequenceMatcher(None, s.genre.lower(), genre.lower()).quick_ratio() if genre else 0  
+        combined_score = (artist_similarity * 0.4) + (title_similarity * 0.3) + (album_similarity * 0.2) + (year_similarity * 0.05) + (genre_similarity * 0.05)       
+        if combined_score > best_score:  
+            best_score = combined_score  
+            best_match = s  
+    if best_match and best_score >= MATCH_THRESHOLD:  
+        insert_matched_song(track.title, track.artist, track.album, best_match.ratingKey)  
+        return best_match, None  
+    else:  
+        logging.info(f"No match found for track {track.title} by {track.artist} with a score of {best_score}.")  
+        return None, track  
 
 def _update_plex_playlist(
     plex: PlexServer,

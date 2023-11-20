@@ -14,43 +14,44 @@ from .helperClasses import Playlist, Track, UserInputs
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 # Get connection object globally
-conn = sqlite3.connect('matched_songs.db')
+conn = sqlite3.connect('plexist.db')
 
 # Database functions
-def initialize_db():
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS matched_songs (
-        title TEXT,
-        artist TEXT,
-        album TEXT,
-        year INTEGER,
-        genre TEXT,
-        plex_id INTEGER
-    )
-    ''')
-    conn.commit()
-
-def insert_matched_song(title, artist, album, plex_id):
-    cursor = conn.cursor()
-
-    cursor.execute('''
-    INSERT INTO matched_songs (title, artist, album, plex_id)
-    VALUES (?, ?, ?, ?)
-    ''', (title, artist, album, plex_id))
-
-    conn.commit()
-
-def get_matched_song(title, artist, album):
-    cursor = conn.cursor()
-
-    cursor.execute('''
-    SELECT plex_id FROM matched_songs
-    WHERE title = ? AND artist = ? AND album = ?
-    ''', (title, artist, album))
-
-    result = cursor.fetchone()
-
+def initialize_db():  
+    conn = sqlite3.connect('plexist.db')  
+    cursor = conn.cursor()  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS plexist (  
+        title TEXT,  
+        artist TEXT,  
+        album TEXT,  
+        year INTEGER,  
+        genre TEXT,  
+        plex_id INTEGER  
+    )  
+    ''')  
+    conn.commit()  
+    conn.close()  
+  
+def insert_matched_song(title, artist, album, plex_id):  
+    conn = sqlite3.connect('plexist.db')  
+    cursor = conn.cursor()  
+    cursor.execute('''  
+    INSERT INTO plexist (title, artist, album, plex_id)  
+    VALUES (?, ?, ?, ?)  
+    ''', (title, artist, album, plex_id))  
+    conn.commit()  
+    conn.close()  
+  
+def get_matched_song(title, artist, album):  
+    conn = sqlite3.connect('plexist.db')  
+    cursor = conn.cursor()  
+    cursor.execute('''  
+    SELECT plex_id FROM plexist  
+    WHERE title = ? AND artist = ? AND album = ?  
+    ''', (title, artist, album))  
+    result = cursor.fetchone()  
+    conn.close()  
     return result[0] if result else None
 
 

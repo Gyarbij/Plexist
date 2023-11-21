@@ -40,11 +40,13 @@ def _get_sp_tracks_from_playlist(
     sp: spotipy.Spotify, user_id: str, playlist: Playlist
 ) -> List[Track]:
     def extract_sp_track_metadata(track) -> Track:
-        title = track["track"]["name"]
-        artist = track["track"]["artists"][0]["name"]
-        album = track["track"]["album"]["name"]
-        url = track["track"]["external_urls"].get("spotify", "")
-        return Track(title, artist, album, url)
+    title = track["track"]["name"]
+    artist = track["track"]["artists"][0]["name"]
+    album = track["track"]["album"]["name"]
+    url = track["track"]["external_urls"].get("spotify", "")
+    year = ""  # Default value
+    genre = ""  # Default value
+    return Track(title, artist, album, url, year, genre)
 
     sp_playlist_tracks = sp.user_playlist_tracks(user_id, playlist.id)
 

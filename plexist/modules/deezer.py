@@ -65,32 +65,32 @@ def _get_dz_playlists(
             )
     return playlists
 
+def _get_dz_tracks_from_playlist(  
+    dz: deezer.Client(),  
+    playlist: Playlist,  
+) -> List[Track]:  
+    """Return list of tracks with metadata.  
+  
+    Args:  
+        dz (deezer.Client): Deezer Client (no credentials needed)  
+        playlist (Playlist): Playlist object  
+  
+    Returns:  
+        List[Track]: list of Track objects with track metadata fields  
+    """  
+    dz_playlist = dz.get_playlist(playlist.id)  
+    tracks = dz_playlist.get_tracks()  
+    return [extract_dz_track_metadata(track) for track in tracks]
 
-def _get_dz_tracks_from_playlist(
-    dz: deezer.Client(),
-    playlist: Playlist,
-) -> List[Track]:
-    """Return list of tracks with metadata.
-
-    Args:
-        dz (deezer.Client): Deezer Client (no credentials needed)
-        playlist (Playlist): Playlist object
-
-    Returns:
-        List[Track]: list of Track objects with track metadata fields
-    """
-
-    def extract_dz_track_metadata(track):
-        track = track.as_dict()
-        title = track["title"]
-        artist = track["artist"]["name"]
-        album = track["album"]["title"]
-        url = track.get("link", "")
-        return Track(title, artist, album, url)
-
-    dz_playlist_tracks = dz.get_playlist(playlist.id).tracks
-
-    return list(map(extract_dz_track_metadata, dz_playlist_tracks))
+def extract_dz_track_metadata(track):
+    track = track.as_dict()
+    title = track["title"]
+    artist = track["artist"]["name"]
+    album = track["album"]["title"]
+    year = track["album"].get("release_date", "").split("-")[0]  # Assuming the release_date is in YYYY-MM-DD format
+    genre = track["album"].get("genre_id", "")
+    url = track.get("link", "")
+    return Track(title, artist, album, url, year, genre)  # Assuming Track class is modified to include year and genre
 
 
 def deezer_playlist_sync(

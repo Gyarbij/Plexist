@@ -7,6 +7,8 @@ class Track:
     artist: str
     album: str
     url: str
+    year: str  
+    genre: str
 
 
 @dataclass

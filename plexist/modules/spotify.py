@@ -44,17 +44,16 @@ def _get_sp_tracks_from_playlist(
         artist = track["track"]["artists"][0]["name"]
         album = track["track"]["album"]["name"]
         url = track["track"]["external_urls"].get("spotify", "")
-        return Track(title, artist, album, url)
-
+        year = ""  # Default value
+        genre = ""  # Default value
+        return Track(title, artist, album, url, year, genre)
     sp_playlist_tracks = sp.user_playlist_tracks(user_id, playlist.id)
-
     tracks = list(
         map(
             extract_sp_track_metadata,
             [i for i in sp_playlist_tracks["items"] if i.get("track")],
         )
     )
-
     while sp_playlist_tracks["next"]:
         sp_playlist_tracks = sp.next(sp_playlist_tracks)
         tracks.extend(
@@ -67,16 +66,20 @@ def _get_sp_tracks_from_playlist(
         )
     return tracks
 
-
 def spotify_playlist_sync(
     sp: spotipy.Spotify, plex: PlexServer, userInputs: UserInputs
 ) -> None:
-    playlists = _get_sp_user_playlists(sp, userInputs.spotify_user_id)
-    if playlists:
-        for playlist in playlists:
-            tracks = _get_sp_tracks_from_playlist(
-                sp, userInputs.spotify_user_id, playlist
-            )
-            update_or_create_plex_playlist(plex, playlist, tracks, userInputs)
-    else:
-        logging.error("No spotify playlists found for user provided")
+    try:
+        playlists = _get_sp_user_playlists(sp, userInputs.spotify_user_id)
+        if playlists:
+            for playlist in playlists:
+                logging.info(f"Syncing playlist: {playlist.name}")
+                tracks = _get_sp_tracks_from_playlist(
+                    sp, userInputs.spotify_user_id, playlist
+                )
+                # Pass additional metadata like year and genre if available
+                update_or_create_plex_playlist(plex, playlist, tracks, userInputs)
+        else:
+            logging.error("No Spotify playlists found for the user provided.")
+    except spotipy.SpotifyException as e:
+        logging.error(f"Spotify Exception: {e}")

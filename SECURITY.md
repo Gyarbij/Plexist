@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-The only version supported is the current builds located at [Docker Hub](https://hub.docker.com/r/gyarbij/wireui/tags)
+The only version supported is the current tag:latest build located at [Docker Hub](https://hub.docker.com/r/gyarbij/wireui/tags)
 
 
 ## Reporting a Vulnerability

@@ -1,3 +1,4 @@
 spotipy>=2.23
 plexapi>=4.15.4
 deezer-python>=6.1.0
+urllib3>=2.2.2 # not directly required, pinned by Snyk to avoid a vulnerability

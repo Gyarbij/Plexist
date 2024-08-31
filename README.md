@@ -50,7 +50,7 @@ python3 plexist.py
 
 ## Docker Deployment
 
-You can run the image via docker run or docker-compose, choice is yours. Multi-Platform mages are available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/).
+You can run the image via docker run or docker compose, choice is yours. Multi-Platform mages are available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/).
 
 Configure the parameters as required. Plex URL and TOKEN are mandatory and the options for your respective streaming service.
 
@@ -83,7 +83,7 @@ docker run -d \
 
 docker-compose.yml should be configured per the below, if you don't user Spotify you can remove the Spotify variables and vice versa for Deezer. 
 
-A template is Here: [docker-compose.yml](https://github.com/gyarbij/plexist/blob/main/assets/docker-compose.yml)
+A template is Here: [docker-compose.yml](https://github.com/gyarbij/plexist/blob/main/assets/compose.yaml)
 
 ```
 version: '3.8'

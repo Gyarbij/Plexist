@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   plexist:
     container_name: plexist
@@ -16,4 +15,6 @@ services:
       - SPOTIFY_USER_ID=<your spotify user id>
       - DEEZER_USER_ID=<deezer user id>
       - DEEZER_PLAYLIST_ID=https://www.deezer.com/en/playlist/10484834882
+    volumes:
+      - <YOURPATH>:/app/data
     restart: unless-stopped

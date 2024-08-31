@@ -32,8 +32,6 @@ def initialize_db():
     conn.commit()  
     conn.close()  
 
-MATCH_THRESHOLD = 0.6
-
 def _match_single_track(plex, track, year=None, genre=None):
     plex_id = get_matched_song(track.title, track.artist, track.album)
     if plex_id:

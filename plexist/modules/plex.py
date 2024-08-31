@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import logging
 import pathlib
@@ -12,7 +13,7 @@ from .helperClasses import Playlist, Track, UserInputs
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-conn = sqlite3.connect('plexist.db')
+DB_PATH = os.getenv('DB_PATH', 'plexist.db')
 
 def initialize_db():  
     conn = sqlite3.connect('plexist.db')  

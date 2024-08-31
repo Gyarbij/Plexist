@@ -10,6 +10,7 @@ import plexapi
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 from .helperClasses import Playlist, Track, UserInputs
+from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -30,6 +31,74 @@ def initialize_db():
     ''')  
     conn.commit()  
     conn.close()  
+
+MATCH_THRESHOLD = 0.6
+
+def _match_single_track(plex, track, year=None, genre=None):
+    plex_id = get_matched_song(track.title, track.artist, track.album)
+    if plex_id:
+        return plex.fetchItem(plex_id), None
+
+    def similarity(a, b):
+        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+    def search_and_score(query, threshold):
+        try:
+            search = plex.search(query, mediatype="track", limit=10)
+        except BadRequest:
+            logging.info(f"Failed to search {query} on Plex")
+            return None, 0
+
+        best_match = None
+        best_score = 0
+
+        for s in search:
+            score = 0
+            score += similarity(s.title, track.title) * 0.4
+            score += similarity(s.artist().title, track.artist) * 0.3
+            score += similarity(s.album().title, track.album) * 0.2
+            
+            # Check for version in parentheses
+            if '(' in track.title and '(' in s.title:
+                version_similarity = similarity(
+                    track.title.split('(')[1].split(')')[0],
+                    s.title.split('(')[1].split(')')[0]
+                )
+                score += version_similarity * 0.1
+
+            if score > best_score:
+                best_score = score
+                best_match = s
+
+        return (best_match, best_score) if best_score >= threshold else (None, 0)
+
+    # Stage 1: Strict matching
+    query = f"{track.title} {track.artist} {track.album}"
+    match, score = search_and_score(query, 0.8)
+    if match:
+        insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
+        return match, None
+
+    # Stage 2: Relax album requirement
+    query = f"{track.title} {track.artist}"
+    match, score = search_and_score(query, 0.7)
+    if match:
+        logging.info(f"Matched '{track.title}' by '{track.artist}' with relaxed album criteria. Score: {score}")
+        insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
+        return match, None
+
+    # Stage 3: Further relaxation
+    words = track.title.split()
+    if len(words) > 1:
+        query = f"{' '.join(words[:2])} {track.artist}"
+        match, score = search_and_score(query, 0.6)
+        if match:
+            logging.info(f"Matched '{track.title}' by '{track.artist}' with partial title. Score: {score}")
+            insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
+            return match, None
+
+    logging.info(f"No match found for track {track.title} by {track.artist}.")
+    return None, track
   
 def insert_matched_song(title, artist, album, plex_id):  
     conn = sqlite3.connect('plexist.db')  
@@ -70,50 +139,12 @@ def _delete_csv(name: str, path: str = "/data") -> None:
     file = data_folder / f"{name}.csv"
     file.unlink()
 
-
-from concurrent.futures import ThreadPoolExecutor
-
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     with ThreadPoolExecutor() as executor:
         results = list(executor.map(lambda track: _match_single_track(plex, track), tracks))
     plex_tracks = [result[0] for result in results if result[0]]
     missing_tracks = [result[1] for result in results if result[1]]
     return plex_tracks, missing_tracks
-
-MATCH_THRESHOLD = 0.6
-
-def _match_single_track(plex, track, year=None, genre=None):  
-    # Check in local DB first  
-    plex_id = get_matched_song(track.title, track.artist, track.album)  
-    if plex_id:  
-        return plex.fetchItem(plex_id), None  
-  
-    search = []  
-    try:  
-        # Combine track title and primary artist for a more refined search  
-        primary_artist = track.artist.split("&")[0].split("ft.")[0].strip()  # Get the primary artist  
-        search_query = f"{track.title} {primary_artist}"  
-        search = plex.search(search_query, mediatype="track", limit=5)  
-    except BadRequest:  
-        logging.info("Failed to search %s on Plex", track.title)  
-    best_match = None  
-    best_score = 0  
-    for s in search:  
-        artist_similarity = SequenceMatcher(None, s.artist().title.lower(), primary_artist.lower()).quick_ratio()  
-        title_similarity = SequenceMatcher(None, s.title.lower(), track.title.lower()).quick_ratio()  
-        album_similarity = SequenceMatcher(None, s.album().title.lower(), track.album.lower()).quick_ratio()  
-        year_similarity = 1 if year and s.year == year else 0  
-        genre_similarity = SequenceMatcher(None, s.genre.lower(), genre.lower()).quick_ratio() if genre else 0  
-        combined_score = (artist_similarity * 0.4) + (title_similarity * 0.3) + (album_similarity * 0.2) + (year_similarity * 0.05) + (genre_similarity * 0.05)       
-        if combined_score > best_score:  
-            best_score = combined_score  
-            best_match = s  
-    if best_match and best_score >= MATCH_THRESHOLD:  
-        insert_matched_song(track.title, track.artist, track.album, best_match.ratingKey)  
-        return best_match, None  
-    else:  
-        logging.info(f"No match found for track {track.title} by {track.artist} with a score of {best_score}.")  
-        return None, track  
 
 def _update_plex_playlist(
     plex: PlexServer,
@@ -128,18 +159,21 @@ def _update_plex_playlist(
     return plex_playlist
 
 
-def update_or_create_plex_playlist(  
-    plex: PlexServer,  
-    playlist: Playlist,  
-    tracks: List[Track],  
-    userInputs: UserInputs,  
-) -> None:  
-    if tracks is None:  
-        logging.error("No tracks provided for playlist %s", playlist.name)  
-        return  
-    available_tracks, missing_tracks = _get_available_plex_tracks(plex, tracks)  
+def update_or_create_plex_playlist(
+    plex: PlexServer,
+    playlist: Playlist,
+    tracks: List[Track],
+    userInputs: UserInputs,
+) -> None:
+    if not tracks:  # Changed from 'is None' to handle empty lists as well
+        logging.error("No tracks provided for playlist %s", playlist.name)
+        return
+
+    available_tracks, missing_tracks = _get_available_plex_tracks(plex, tracks)
+
     if available_tracks:
         try:
+            plex_playlist = plex.playlist(playlist.name)
             plex_playlist = _update_plex_playlist(
                 plex=plex,
                 available_tracks=available_tracks,
@@ -148,52 +182,39 @@ def update_or_create_plex_playlist(
             )
             logging.info("Updated playlist %s", playlist.name)
         except NotFound:
-            plex.createPlaylist(title=playlist.name, items=available_tracks)
+            plex_playlist = plex.createPlaylist(title=playlist.name, items=available_tracks)
             logging.info("Created playlist %s", playlist.name)
-            plex_playlist = plex.playlist(playlist.name)
+
         if playlist.description and userInputs.add_playlist_description:
             try:
                 plex_playlist.edit(summary=playlist.description)
-            except:
-                logging.info(
-                    "Failed to update description for playlist %s",
-                    playlist.name,
-                )
+                logging.info("Updated description for playlist %s", playlist.name)
+            except Exception as e:
+                logging.error("Failed to update description for playlist %s: %s", playlist.name, str(e))
+
         if playlist.poster and userInputs.add_playlist_poster:
             try:
                 plex_playlist.uploadPoster(url=playlist.poster)
-            except:
-                logging.info(
-                    "Failed to update poster for playlist %s", playlist.name
-                )
-        logging.info(
-            "Updated playlist %s with summary and poster", playlist.name
-        )
+                logging.info("Updated poster for playlist %s", playlist.name)
+            except Exception as e:
+                logging.error("Failed to update poster for playlist %s: %s", playlist.name, str(e))
     else:
-        logging.info(
-            "No songs for playlist %s were found on plex, skipping the"
-            " playlist creation",
-            playlist.name,
-        )
-    if missing_tracks and userInputs.write_missing_as_csv:
-        try:
-            _write_csv(missing_tracks, playlist.name)
-            logging.info("Missing tracks written to %s.csv", playlist.name)
-        except:
-            logging.info(
-                "Failed to write missing tracks for %s, likely permission"
-                " issue",
-                playlist.name,
-            )
-    if (not missing_tracks) and userInputs.write_missing_as_csv:
-        try:
-            _delete_csv(playlist.name)
-            logging.info("Deleted old %s.csv", playlist.name)
-        except:
-            logging.info(
-                "Failed to delete %s.csv, likely permission issue",
-                playlist.name,
-            )
+        logging.warning("No songs for playlist %s were found on Plex, skipping the playlist creation", playlist.name)
+
+    if userInputs.write_missing_as_csv:
+        if missing_tracks:
+            try:
+                _write_csv(missing_tracks, playlist.name)
+                logging.info("Missing tracks written to %s.csv", playlist.name)
+            except Exception as e:
+                logging.error("Failed to write missing tracks for %s: %s", playlist.name, str(e))
+        else:
+            try:
+                _delete_csv(playlist.name)
+                logging.info("Deleted old %s.csv as no missing tracks found", playlist.name)
+            except Exception as e:
+                logging.error("Failed to delete %s.csv: %s", playlist.name, str(e))
 
 def end_session():
-    conn.close()
+    if 'conn' in locals() or 'conn' in globals():
+        conn.close()

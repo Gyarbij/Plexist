@@ -4,17 +4,20 @@ import logging
 import pathlib
 import sys
 from difflib import SequenceMatcher
-from typing import List
+from typing import List, Dict
 from concurrent.futures import ThreadPoolExecutor
 import plexapi
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 from .helperClasses import Playlist, Track, UserInputs
-from concurrent.futures import ThreadPoolExecutor
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 DB_PATH = os.getenv('DB_PATH', 'plexist.db')
+
+# Global cache for Plex tracks
+plex_tracks_cache = {}
 
 def initialize_db():
     conn = sqlite3.connect('plexist.db')
@@ -32,38 +35,47 @@ def initialize_db():
     conn.commit()
     conn.close()
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def fetch_all_plex_tracks(plex: PlexServer) -> Dict[str, plexapi.audio.Track]:
+    global plex_tracks_cache
+    if not plex_tracks_cache:
+        logging.info("Fetching all Plex tracks...")
+        all_tracks = plex.library.search(libtype="track")
+        plex_tracks_cache = {f"{track.title}|{track.artist().title}|{track.album().title}": track for track in all_tracks}
+        logging.info(f"Fetched {len(plex_tracks_cache)} tracks from Plex")
+    return plex_tracks_cache
+
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
+    plex_tracks = fetch_all_plex_tracks(plex)
+    
+    def match_track(track):
+        return _match_single_track(plex_tracks, track)
+    
     with ThreadPoolExecutor() as executor:
-        results = list(executor.map(lambda track: _match_single_track(plex, track), tracks))
+        results = list(executor.map(match_track, tracks))
+    
     plex_tracks = [result[0] for result in results if result[0]]
     missing_tracks = [result[1] for result in results if result[1]]
     return plex_tracks, missing_tracks
 
-def _match_single_track(plex, track, year=None, genre=None):
+def _match_single_track(plex_tracks: Dict[str, plexapi.audio.Track], track: Track, year=None, genre=None):
     plex_id = get_matched_song(track.title, track.artist, track.album)
     if plex_id:
-        return plex.fetchItem(plex_id), None
+        return plex_tracks.get(f"{track.title}|{track.artist}|{track.album}"), None
 
     def similarity(a, b):
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
     def search_and_score(query, threshold, year_weight=0, genre_weight=0):
-        try:
-            search = plex.search(query, mediatype="track", limit=20)  # Increased limit
-        except BadRequest:
-            logging.info(f"Failed to search {query} on Plex")
-            return None, 0
-
         best_match = None
         best_score = 0
 
-        for s in search:
+        for key, s in plex_tracks.items():
             score = 0
             score += similarity(s.title, track.title) * 0.4
             score += similarity(s.artist().title, track.artist) * 0.3
             score += similarity(s.album().title, track.album) * 0.2
 
-            # Check for version in parentheses
             if '(' in track.title and '(' in s.title:
                 version_similarity = similarity(
                     track.title.split('(')[1].split(')')[0],
@@ -71,7 +83,6 @@ def _match_single_track(plex, track, year=None, genre=None):
                 )
                 score += version_similarity * 0.1
 
-            # Year and Genre Matching (if available)
             if year and s.year:
                 score += (s.year == year) * year_weight
             if genre and s.genres:
@@ -84,16 +95,16 @@ def _match_single_track(plex, track, year=None, genre=None):
 
         return (best_match, best_score) if best_score >= threshold else (None, 0)
 
-    # Stage 1: Strict matching (including year and genre if available)
+    # Stage 1: Strict matching
     query = f"{track.title} {track.artist} {track.album}"
-    match, score = search_and_score(query, 0.85, year_weight=0.2, genre_weight=0.1)  # Adjusted weights
+    match, score = search_and_score(query, 0.85, year_weight=0.2, genre_weight=0.1)
     if match:
         insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
         return match, None
 
     # Stage 2: Relax album requirement
     query = f"{track.title} {track.artist}"
-    match, score = search_and_score(query, 0.75)  # Slightly higher threshold
+    match, score = search_and_score(query, 0.75)
     if match:
         logging.info(f"Matched '{track.title}' by '{track.artist}' with relaxed album criteria. Score: {score}")
         insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
@@ -103,13 +114,13 @@ def _match_single_track(plex, track, year=None, genre=None):
     words = track.title.split()
     if len(words) > 1:
         query = f"{' '.join(words[:2])} {track.artist}"
-        match, score = search_and_score(query, 0.6)  # Increased threshold
+        match, score = search_and_score(query, 0.6)
         if match:
             logging.info(f"Matched '{track.title}' by '{track.artist}' with partial title. Score: {score}")
             insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
             return match, None
 
-    # Stage 4: Artist Only Match (for compilations, soundtracks, etc.)
+    # Stage 4: Artist Only Match
     query = f"{track.artist}"
     match, score = search_and_score(query, 0.65)
     if match:
@@ -117,7 +128,7 @@ def _match_single_track(plex, track, year=None, genre=None):
         insert_matched_song(track.title, track.artist, track.album, match.ratingKey)
         return match, None
 
-    # Stage 5: Title Only Match (last resort) 
+    # Stage 5: Title Only Match
     query = f"{track.title}"
     match, score = search_and_score(query, 0.55) 
     if match:
@@ -143,12 +154,13 @@ def insert_matched_song(title, artist, album, plex_id):
     conn = sqlite3.connect('plexist.db')  
     cursor = conn.cursor()  
     cursor.execute('''  
-    INSERT INTO plexist (title, artist, album, plex_id)  
+    INSERT OR REPLACE INTO plexist (title, artist, album, plex_id)  
     VALUES (?, ?, ?, ?)  
     ''', (title, artist, album, plex_id))  
     conn.commit()  
     conn.close()
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def _update_plex_playlist(
     plex: PlexServer,
     available_tracks: List,
@@ -161,14 +173,14 @@ def _update_plex_playlist(
     plex_playlist.addItems(available_tracks)
     return plex_playlist
 
-
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def update_or_create_plex_playlist(
     plex: PlexServer,
     playlist: Playlist,
     tracks: List[Track],
     userInputs: UserInputs,
 ) -> None:
-    if not tracks:  # Changed from 'is None' to handle empty lists as well
+    if not tracks:
         logging.error("No tracks provided for playlist %s", playlist.name)
         return
 
@@ -238,3 +250,7 @@ def _delete_csv(name: str, path: str = "/data") -> None:
 def end_session():
     if 'conn' in locals() or 'conn' in globals():
         conn.close()
+
+def clear_cache():
+    global plex_tracks_cache
+    plex_tracks_cache.clear()

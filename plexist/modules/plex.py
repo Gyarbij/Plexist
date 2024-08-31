@@ -11,6 +11,8 @@ from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 from .helperClasses import Playlist, Track, UserInputs
 from tenacity import retry, stop_after_attempt, wait_exponential
+import threading
+import time
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -18,6 +20,8 @@ DB_PATH = os.getenv('DB_PATH', 'plexist.db')
 
 # Global cache for Plex tracks
 plex_tracks_cache = {}
+cache_lock = threading.Lock()
+cache_building = False
 
 def initialize_db():
     conn = sqlite3.connect('plexist.db')
@@ -36,14 +40,63 @@ def initialize_db():
     conn.close()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def fetch_all_plex_tracks(plex: PlexServer) -> Dict[str, plexapi.audio.Track]:
-    global plex_tracks_cache
-    if not plex_tracks_cache:
-        logging.info("Fetching all Plex tracks...")
-        all_tracks = plex.library.search(libtype="track")
-        plex_tracks_cache = {f"{track.title}|{track.artist().title}|{track.album().title}": track for track in all_tracks}
-        logging.info(f"Fetched {len(plex_tracks_cache)} tracks from Plex")
-    return plex_tracks_cache
+def fetch_plex_tracks(plex: PlexServer, offset: int = 0, limit: int = 100) -> List[plexapi.audio.Track]:
+    return plex.library.search(libtype="track", container_start=offset, container_size=limit)
+
+def update_cache_in_background(plex: PlexServer):
+    global cache_building
+    if cache_building:
+        return
+    
+    cache_building = True
+    threading.Thread(target=_update_cache, args=(plex,), daemon=True).start()
+
+def _update_cache(plex: PlexServer):
+    global cache_building
+    offset = 0
+    limit = 100
+    total_tracks = 0
+    last_update_time = get_last_update_time()
+
+    while True:
+        try:
+            tracks = fetch_plex_tracks(plex, offset, limit)
+            if not tracks:
+                break
+
+            with cache_lock:
+                for track in tracks:
+                    if track.addedAt > last_update_time or track.updatedAt > last_update_time:
+                        key = f"{track.title}|{track.artist().title}|{track.album().title}"
+                        plex_tracks_cache[key] = track
+                        _update_db_cache(track)
+                        total_tracks += 1
+
+            offset += limit
+            logging.info(f"Updated {total_tracks} tracks in cache so far...")
+            time.sleep(1)  # Add a small delay to avoid hitting rate limits
+        except Exception as e:
+            logging.error(f"Error while updating cache: {str(e)}")
+            break
+
+    set_last_update_time()
+    cache_building = False
+    logging.info(f"Finished updating cache. Total tracks updated: {total_tracks}")
+
+def get_last_update_time():
+    conn = sqlite3.connect('plexist.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM metadata WHERE key = "last_update_time"')
+    result = cursor.fetchone()
+    conn.close()
+    return float(result[0]) if result else 0
+
+def set_last_update_time():
+    conn = sqlite3.connect('plexist.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO metadata (key, value) VALUES ("last_update_time", ?)', (time.time(),))
+    conn.commit()
+    conn.close()
 
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     plex_tracks = fetch_all_plex_tracks(plex)
@@ -251,6 +304,10 @@ def end_session():
     if 'conn' in locals() or 'conn' in globals():
         conn.close()
 
+def initialize_cache(plex: PlexServer):
+    load_cache_from_db()
+    update_cache_in_background(plex)
+    
 def clear_cache():
     global plex_tracks_cache
     plex_tracks_cache.clear()

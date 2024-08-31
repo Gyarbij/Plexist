@@ -91,7 +91,7 @@ def _match_single_track(plex, track, year=None, genre=None):
     words = track.title.split()
     if len(words) > 1:
         query = f"{' '.join(words[:2])} {track.artist}"
-        match, score = search_and_score(query, 0.6)
+        match, score = search_and_score(query, 0.4)
         if match:
             logging.info(f"Matched '{track.title}' by '{track.artist}' with partial title. Score: {score}")
             insert_matched_song(track.title, track.artist, track.album, match.ratingKey)

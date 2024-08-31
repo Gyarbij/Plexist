@@ -60,6 +60,15 @@ def initialize_db():
 def fetch_plex_tracks(plex: PlexServer, offset: int = 0, limit: int = 100) -> List[plexapi.audio.Track]:
     return plex.library.search(libtype="track", container_start=offset, container_size=limit)
 
+def fetch_all_plex_tracks(plex: PlexServer) -> Dict[str, plexapi.audio.Track]:
+    global plex_tracks_cache
+    if not plex_tracks_cache:
+        load_cache_from_db()
+    if not plex_tracks_cache:
+        logging.info("Cache is empty. Fetching all Plex tracks...")
+        update_cache_in_background(plex)
+    return plex_tracks_cache
+
 def update_cache_in_background(plex: PlexServer):
     global cache_building
     if cache_building:
@@ -69,7 +78,7 @@ def update_cache_in_background(plex: PlexServer):
     threading.Thread(target=_update_cache, args=(plex,), daemon=True).start()
 
 def _update_cache(plex: PlexServer):
-    global cache_building
+    global cache_building, plex_tracks_cache
     offset = 0
     limit = 100
     total_tracks = 0
@@ -84,7 +93,7 @@ def _update_cache(plex: PlexServer):
             with cache_lock:
                 for track in tracks:
                     if track.addedAt > last_update_time or track.updatedAt > last_update_time:
-                        key = f"{track.title}|{track.artist().title}|{track.album().title}"
+                        key = f"{track.title}|{track.parentTitle}|{track.grandparentTitle}"
                         plex_tracks_cache[key] = track
                         _update_db_cache(track)
                         total_tracks += 1
@@ -122,10 +131,10 @@ def _update_db_cache(track):
     INSERT OR REPLACE INTO plex_cache (key, title, artist, album, year, genre, plex_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (
-        f"{track.title}|{track.artist().title}|{track.album().title}",
+        f"{track.title}|{track.parentTitle}|{track.grandparentTitle}",
         track.title,
-        track.artist().title,
-        track.album().title,
+        track.parentTitle,
+        track.grandparentTitle,
         track.year,
         ','.join(g.tag for g in track.genres) if track.genres else '',
         track.ratingKey

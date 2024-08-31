@@ -12,7 +12,7 @@ from plexapi.server import PlexServer
 from .helperClasses import Playlist, Track, UserInputs
 from tenacity import retry, stop_after_attempt, wait_exponential
 import threading
-#import time
+import time
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -54,26 +54,34 @@ def initialize_db():
 def fetch_plex_tracks(plex: PlexServer, offset: int = 0, limit: int = 100) -> List[plexapi.audio.Track]:
     return plex.library.search(libtype="track", container_start=offset, container_size=limit)
 
-def fetch_all_plex_tracks(plex: PlexServer) -> Dict[str, plexapi.audio.Track]:
-    global plex_tracks_cache
-    if not plex_tracks_cache:
-        load_cache_from_db()
-    if not plex_tracks_cache:
-        logging.info("Cache is empty. Fetching all Plex tracks...")
-        offset = 0
-        limit = 100
+def fetch_and_cache_tracks(plex: PlexServer):
+    global plex_tracks_cache, cache_building
+    if cache_building:
+        return
+
+    cache_building = True
+    offset = 0
+    limit = 100
+
+    def background_fetch():
+        nonlocal offset
         while True:
             tracks = fetch_plex_tracks(plex, offset, limit)
             if not tracks:
                 break
-            for track in tracks:
-                key = f"{track.title}|{track.artist().title}|{track.album().title}"
-                plex_tracks_cache[key] = track
+            with cache_lock:
+                for track in tracks:
+                    key = f"{track.title}|{track.artist().title}|{track.album().title}"
+                    plex_tracks_cache[key] = track
             offset += limit
-            logging.info(f"Fetched {len(plex_tracks_cache)} tracks so far...")
-        logging.info(f"Finished fetching all tracks. Total tracks: {len(plex_tracks_cache)}")
-        _update_db_cache_bulk(plex_tracks_cache)
-    return plex_tracks_cache
+            _update_db_cache_bulk(dict(list(plex_tracks_cache.items())[-len(tracks):]))
+            logging.info(f"Fetched and cached {len(plex_tracks_cache)} tracks so far...")
+        
+        global cache_building
+        cache_building = False
+        logging.info(f"Finished fetching all tracks. Total tracks in cache: {len(plex_tracks_cache)}")
+
+    threading.Thread(target=background_fetch, daemon=True).start()
 
 def _update_db_cache_bulk(tracks_cache):
     conn = sqlite3.connect(DB_PATH)
@@ -86,7 +94,6 @@ def _update_db_cache_bulk(tracks_cache):
           for key, track in tracks_cache.items()])
     conn.commit()
     conn.close()
-    logging.info(f"Bulk updated {len(tracks_cache)} tracks in the database cache")
 
 def load_cache_from_db():
     global plex_tracks_cache
@@ -111,10 +118,8 @@ def load_cache_from_db():
     logging.info(f"Loaded {len(plex_tracks_cache)} tracks from the database cache")
 
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
-    plex_tracks = fetch_all_plex_tracks(plex)
-    
     def match_track(track):
-        return _match_single_track(plex, plex_tracks, track)
+        return _match_single_track(plex, track)
     
     with ThreadPoolExecutor() as executor:
         results = list(executor.map(match_track, tracks))
@@ -123,65 +128,82 @@ def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     missing_tracks = [result[1] for result in results if result[1]]
     return plex_tracks, missing_tracks
 
-def _match_single_track(plex: PlexServer, plex_tracks: Dict[str, plexapi.audio.Track], track: Track):
+def _match_single_track(plex: PlexServer, track: Track):
     def similarity(a, b):
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
     def search_and_score(query, threshold):
-        try:
-            search = plex.search(query, mediatype="track", limit=20)
-        except BadRequest:
-            logging.info(f"Failed to search {query} on Plex")
-            return None, 0
-
         best_match = None
         best_score = 0
 
-        for s in search:
-            score = 0
-            score += similarity(s.title, track.title) * 0.4
-            score += similarity(s.artist().title, track.artist) * 0.3
-            score += similarity(s.album().title, track.album) * 0.2
+        # First, search in the cache
+        with cache_lock:
+            for key, s in plex_tracks_cache.items():
+                score = 0
+                score += similarity(s.title, track.title) * 0.4
+                score += similarity(s.artist().title, track.artist) * 0.3
+                score += similarity(s.album().title, track.album) * 0.2
 
-            # Check for version in parentheses
-            if '(' in track.title and '(' in s.title:
-                version_similarity = similarity(
-                    track.title.split('(')[1].split(')')[0],
-                    s.title.split('(')[1].split(')')[0]
-                )
-                score += version_similarity * 0.1
+                if '(' in track.title and '(' in s.title:
+                    version_similarity = similarity(
+                        track.title.split('(')[1].split(')')[0],
+                        s.title.split('(')[1].split(')')[0]
+                    )
+                    score += version_similarity * 0.1
 
-            # Year and Genre Matching (if available)
-            if track.year and s.year:
-                score += (int(track.year) == s.year) * 0.1
-            if track.genre and s.genres:
-                genre_matches = any(similarity(g.tag, track.genre) > 0.8 for g in s.genres)
-                score += genre_matches * 0.1
+                if track.year and s.year:
+                    score += (int(track.year) == s.year) * 0.1
+                if track.genre and s.genres:
+                    genre_matches = any(similarity(g.tag, track.genre) > 0.8 for g in s.genres)
+                    score += genre_matches * 0.1
 
-            if score > best_score:
-                best_score = score
-                best_match = s
+                if score > best_score:
+                    best_score = score
+                    best_match = s
+
+        # If no good match in cache, search Plex directly
+        if best_score < threshold:
+            try:
+                search = plex.search(query, mediatype="track", limit=20)
+                for s in search:
+                    score = 0
+                    score += similarity(s.title, track.title) * 0.4
+                    score += similarity(s.artist().title, track.artist) * 0.3
+                    score += similarity(s.album().title, track.album) * 0.2
+
+                    if '(' in track.title and '(' in s.title:
+                        version_similarity = similarity(
+                            track.title.split('(')[1].split(')')[0],
+                            s.title.split('(')[1].split(')')[0]
+                        )
+                        score += version_similarity * 0.1
+
+                    if track.year and s.year:
+                        score += (int(track.year) == s.year) * 0.1
+                    if track.genre and s.genres:
+                        genre_matches = any(similarity(g.tag, track.genre) > 0.8 for g in s.genres)
+                        score += genre_matches * 0.1
+
+                    if score > best_score:
+                        best_score = score
+                        best_match = s
+            except BadRequest:
+                logging.info(f"Failed to search {query} on Plex")
 
         return (best_match, best_score) if best_score >= threshold else (None, 0)
 
     # Stage 1: Exact match from cache
     key = f"{track.title}|{track.artist}|{track.album}"
-    if key in plex_tracks:
-        logging.info(f"Exact match found in cache for '{track.title}' by '{track.artist}'")
-        return plex_tracks[key], None
+    with cache_lock:
+        if key in plex_tracks_cache:
+            logging.info(f"Exact match found in cache for '{track.title}' by '{track.artist}'")
+            return plex_tracks_cache[key], None
 
     # Stage 2: Strict matching
     query = f"{track.title} {track.artist} {track.album}"
     match, score = search_and_score(query, 0.85)
     if match:
         logging.info(f"Strict match found for '{track.title}' by '{track.artist}'. Score: {score}")
-        return match, None
-
-    # Stage 3: Relax album requirement
-    query = f"{track.title} {track.artist}"
-    match, score = search_and_score(query, 0.75)
-    if match:
-        logging.info(f"Matched '{track.title}' by '{track.artist}' with relaxed album criteria. Score: {score}")
         return match, None
 
     # Stage 4: Further relaxation (partial title)
@@ -210,6 +232,10 @@ def _match_single_track(plex: PlexServer, plex_tracks: Dict[str, plexapi.audio.T
     logging.info(f"No match found for track {track.title} by {track.artist}.")
     return None, track
 
+def initialize_cache(plex: PlexServer):
+    load_cache_from_db()
+    fetch_and_cache_tracks(plex)
+    
 def get_matched_song(title, artist, album):  
     conn = sqlite3.connect(DB_PATH)  
     cursor = conn.cursor()  

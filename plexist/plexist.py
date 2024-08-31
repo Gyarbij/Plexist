@@ -79,7 +79,7 @@ def main():
         logging.info("Starting playlist sync")
         
         # Update the cache
-        initialize_cache(plex)
+        #initialize_cache(plex)
 
         # Spotify sync
         logging.info("Starting Spotify playlist sync")

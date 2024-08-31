@@ -234,7 +234,6 @@ def _match_single_track(plex: PlexServer, track: Track):
 
 def initialize_cache(plex: PlexServer):
     load_cache_from_db()
-    load_cache_from_db()
     if not plex_tracks_cache:
         fetch_and_cache_tracks(plex)
 

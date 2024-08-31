@@ -234,8 +234,10 @@ def _match_single_track(plex: PlexServer, track: Track):
 
 def initialize_cache(plex: PlexServer):
     load_cache_from_db()
-    fetch_and_cache_tracks(plex)
-    
+    load_cache_from_db()
+    if not plex_tracks_cache:
+        fetch_and_cache_tracks(plex)
+
 def get_matched_song(title, artist, album):  
     conn = sqlite3.connect(DB_PATH)  
     cursor = conn.cursor()  
@@ -347,11 +349,6 @@ def _delete_csv(name: str, path: str = "/data") -> None:
 def end_session():
     if 'conn' in locals() or 'conn' in globals():
         conn.close()
-
-def initialize_cache(plex: PlexServer):
-    load_cache_from_db()
-    if not plex_tracks_cache:
-        fetch_all_plex_tracks(plex)
 
 def clear_cache():
     global plex_tracks_cache

@@ -24,7 +24,7 @@ cache_lock = threading.Lock()
 cache_building = False
 
 def initialize_db():
-    conn = sqlite3.connect('plexist.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS plexist (
@@ -34,6 +34,23 @@ def initialize_db():
         year INTEGER,
         genre TEXT,
         plex_id INTEGER
+    )
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS plex_cache (
+        key TEXT PRIMARY KEY,
+        title TEXT,
+        artist TEXT,
+        album TEXT,
+        year INTEGER,
+        genre TEXT,
+        plex_id INTEGER
+    )
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT
     )
     ''')
     conn.commit()
@@ -84,7 +101,7 @@ def _update_cache(plex: PlexServer):
     logging.info(f"Finished updating cache. Total tracks updated: {total_tracks}")
 
 def get_last_update_time():
-    conn = sqlite3.connect('plexist.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT value FROM metadata WHERE key = "last_update_time"')
     result = cursor.fetchone()
@@ -92,11 +109,52 @@ def get_last_update_time():
     return float(result[0]) if result else 0
 
 def set_last_update_time():
-    conn = sqlite3.connect('plexist.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO metadata (key, value) VALUES ("last_update_time", ?)', (time.time(),))
+    cursor.execute('INSERT OR REPLACE INTO metadata (key, value) VALUES ("last_update_time", ?)', (str(time.time()),))
     conn.commit()
     conn.close()
+
+def _update_db_cache(track):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT OR REPLACE INTO plex_cache (key, title, artist, album, year, genre, plex_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        f"{track.title}|{track.artist().title}|{track.album().title}",
+        track.title,
+        track.artist().title,
+        track.album().title,
+        track.year,
+        ','.join(g.tag for g in track.genres) if track.genres else '',
+        track.ratingKey
+    ))
+    conn.commit()
+    conn.close()
+
+def load_cache_from_db():
+    global plex_tracks_cache
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT key, title, artist, album, year, genre, plex_id FROM plex_cache')
+    rows = cursor.fetchall()
+    conn.close()
+
+    with cache_lock:
+        plex_tracks_cache.clear()
+        for row in rows:
+            key, title, artist, album, year, genre, plex_id = row
+            plex_tracks_cache[key] = plexapi.audio.Track(None, {
+                'title': title,
+                'parentTitle': artist,
+                'grandparentTitle': album,
+                'year': year,
+                'genre': [{'tag': g} for g in genre.split(',')] if genre else [],
+                'ratingKey': plex_id
+            })
+    
+    logging.info(f"Loaded {len(plex_tracks_cache)} tracks from the database cache")
 
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     plex_tracks = fetch_all_plex_tracks(plex)
@@ -307,7 +365,16 @@ def end_session():
 def initialize_cache(plex: PlexServer):
     load_cache_from_db()
     update_cache_in_background(plex)
-    
+
 def clear_cache():
     global plex_tracks_cache
-    plex_tracks_cache.clear()
+    with cache_lock:
+        plex_tracks_cache.clear()
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM plex_cache')
+    conn.commit()
+    conn.close()
+    
+    logging.info("Cache cleared")

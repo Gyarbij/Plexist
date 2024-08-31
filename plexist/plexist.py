@@ -10,7 +10,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from modules.deezer import deezer_playlist_sync
 from modules.helperClasses import UserInputs
 from modules.spotify import spotify_playlist_sync
-from modules.plex import initialize_db, clear_cache  # Import clear_cache function
+from modules.plex import initialize_db, initialize_cache
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -65,19 +65,21 @@ def initialize_spotify_client(user_inputs):
         return None
 
 def main():
-    initialize_db()  # Initialize the database at the start of the main function
-
+    initialize_db()
     user_inputs = read_environment_variables()
     plex = initialize_plex_server(user_inputs)
 
     if plex is None:
         return
 
+    # Initialize the cache
+    initialize_cache(plex)
+
     while True:
         logging.info("Starting playlist sync")
         
-        # Clear the cache at the beginning of each run
-        clear_cache()
+        # Update the cache
+        initialize_cache(plex)
 
         # Spotify sync
         logging.info("Starting Spotify playlist sync")

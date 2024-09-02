@@ -4,7 +4,7 @@
 
 The only versions supported are tags:
 - latest
-- dev
+- test
 
 located at [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/tags)
 

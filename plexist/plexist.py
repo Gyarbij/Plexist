@@ -3,17 +3,17 @@
 import logging
 import os
 import time
-
 import deezer
 import spotipy
 from plexapi.server import PlexServer
 from spotipy.oauth2 import SpotifyClientCredentials
-
 from modules.deezer import deezer_playlist_sync
 from modules.helperClasses import UserInputs
 from modules.spotify import spotify_playlist_sync
-from modules.plex import initialize_db  # Importing the database initialization function
+from modules.plex import initialize_db, initialize_cache
+from tenacity import retry, stop_after_attempt, wait_exponential
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def read_environment_variables():
     return UserInputs(
@@ -31,19 +31,19 @@ def read_environment_variables():
         deezer_playlist_ids=os.getenv("DEEZER_PLAYLIST_ID"),
     )
 
-
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def initialize_plex_server(user_inputs):
     if user_inputs.plex_url and user_inputs.plex_token:
         try:
             return PlexServer(user_inputs.plex_url, user_inputs.plex_token)
         except Exception as e:
             logging.error(f"Plex Authorization error: {e}")
-            return None
+            raise  # Re-raise the exception to trigger retry
     else:
         logging.error("Missing Plex Authorization Variables")
         return None
 
-
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def initialize_spotify_client(user_inputs):
     if (
         user_inputs.spotipy_client_id
@@ -59,23 +59,27 @@ def initialize_spotify_client(user_inputs):
             )
         except Exception as e:
             logging.error(f"Spotify Authorization error: {e}")
-            return None
+            raise  # Re-raise the exception to trigger retry
     else:
         logging.error("Missing one or more Spotify Authorization Variables")
         return None
 
-
 def main():
-    initialize_db()  # Initialize the database at the start of the main function
-
+    initialize_db()
     user_inputs = read_environment_variables()
     plex = initialize_plex_server(user_inputs)
 
     if plex is None:
         return
 
+    # Initialize the cache
+    initialize_cache(plex)
+
     while True:
         logging.info("Starting playlist sync")
+        
+        # Update the cache
+        #initialize_cache(plex)
 
         # Spotify sync
         logging.info("Starting Spotify playlist sync")
@@ -96,7 +100,6 @@ def main():
         logging.info(f"Sleeping for {user_inputs.wait_seconds} seconds")
 
         time.sleep(user_inputs.wait_seconds)
-
 
 if __name__ == "__main__":
     main()

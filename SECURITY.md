@@ -2,7 +2,11 @@
 
 ## Supported Versions
 
-The only version supported is the current tag:latest build located at [Docker Hub](https://hub.docker.com/r/gyarbij/wireui/tags)
+The only versions supported are tags:
+- latest
+- dev
+
+located at [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/tags)
 
 
 ## Reporting a Vulnerability

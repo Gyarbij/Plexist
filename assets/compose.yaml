@@ -5,16 +5,19 @@ services:
     environment:
       - PLEX_URL=http://#.#.#.#:32400
       - PLEX_TOKEN=<your plex token>
-      - WRITE_MISSING_AS_CSV=1
-      - ADD_PLAYLIST_POSTER=1
-      - ADD_PLAYLIST_DESCRIPTION=1
-      - APPEND_INSTEAD_OF_SYNC=0
-      - SECONDS_TO_WAIT=84000
-      - SPOTIFY_CLIENT_ID=<your spotify client id>
-      - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
-      - SPOTIFY_USER_ID=<your spotify user id>
-      - DEEZER_USER_ID=<deezer user id>
-      - DEEZER_PLAYLIST_ID=https://www.deezer.com/en/playlist/10484834882
+      - DEEZER_USER_ID=<deezer user id> # Optional, can use deezer or spotify
+      - DEEZER_PLAYLIST_ID=https://www.deezer.com/en/playlist/10484834882 # Optional
+      - SPOTIFY_USER_ID=<your spotify user id> # Optional, can use deezer or spotify
+      - SPOTIFY_PLAYLIST_ID=<your spotify playlist id> # Optional
+      #- WRITE_MISSING_AS_CSV=Yes
+      #- ADD_PLAYLIST_POSTER=Yes
+      #- ADD_PLAYLIST_DESCRIPTION=Yes
+      #- APPEND_INSTEAD_OF_SYNC=No
+      #- SECONDS_TO_WAIT=84000
+      #- SPOTIFY_CLIENT_ID=<your spotify client id>
+      #- SPOTIFY_CLIENT_SECRET=<your spotify client secret>
+      #- DB_PATH=/data/plexist.db  # Define the database name and path
+      #- CSV_PATH=/data 
     volumes:
-      - <YOURPATH>:/app/data
+      - ./plexist_data:/data  # Ensure the volume mapping matches the path in the environment variables
     restart: unless-stopped

@@ -3,20 +3,22 @@ import sqlite3
 import logging
 import pathlib
 import sys
+import plexapi
+import threading
+import time
 from difflib import SequenceMatcher
 from typing import List, Dict
 from concurrent.futures import ThreadPoolExecutor
-import plexapi
+from pathlib import Path
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 from .helperClasses import Playlist, Track, UserInputs
 from tenacity import retry, stop_after_attempt, wait_exponential
-import threading
-import time
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-DB_PATH = os.getenv('DB_PATH', 'plexist.db')
+DB_PATH = os.getenv('DB_PATH', '/data/plexist.db')  # Fallback to a default path if not set
+CSV_PATH = os.getenv('CSV_PATH', '/data')  # Fallback to a default path if not set
 
 # Global cache for Plex tracks
 plex_tracks_cache = {}

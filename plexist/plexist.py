@@ -15,20 +15,24 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def str_to_bool(value):
+    """Converts a string to a boolean value."""
+    return value.lower() in ['yes', 'y', 'true', '1']
+
 def read_environment_variables():
     return UserInputs(
         plex_url=os.getenv("PLEX_URL"),
         plex_token=os.getenv("PLEX_TOKEN"),
-        write_missing_as_csv=os.getenv("WRITE_MISSING_AS_CSV", "0") == "1",
-        add_playlist_poster=os.getenv("ADD_PLAYLIST_POSTER", "1") == "1",
-        add_playlist_description=os.getenv("ADD_PLAYLIST_DESCRIPTION", "1") == "1",
-        append_instead_of_sync=os.getenv("APPEND_INSTEAD_OF_SYNC", "False") == "1",
-        wait_seconds=int(os.getenv("SECONDS_TO_WAIT", 86400)),
+        write_missing_as_csv=str_to_bool(os.getenv("WRITE_MISSING_AS_CSV", "No")),
+        add_playlist_poster=str_to_bool(os.getenv("ADD_PLAYLIST_POSTER", "Yes")),
+        add_playlist_description=str_to_bool(os.getenv("ADD_PLAYLIST_DESCRIPTION", "Yes")),
+        append_instead_of_sync=str_to_bool(os.getenv("APPEND_INSTEAD_OF_SYNC", "No")),
+        wait_seconds=int(os.getenv("SECONDS_TO_WAIT", "84000")),
         spotipy_client_id=os.getenv("SPOTIFY_CLIENT_ID"),
         spotipy_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
         spotify_user_id=os.getenv("SPOTIFY_USER_ID"),
         deezer_user_id=os.getenv("DEEZER_USER_ID"),
-        deezer_playlist_ids=os.getenv("DEEZER_PLAYLIST_ID"),
+        deezer_playlist_ids=os.getenv("DEEZER_PLAYLIST_ID")
     )
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))

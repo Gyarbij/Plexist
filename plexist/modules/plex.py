@@ -23,7 +23,7 @@ CSV_PATH = os.getenv('CSV_PATH', '/data')  # Fallback to a default path if not s
 # Global cache for Plex tracks
 plex_tracks_cache = {}
 cache_lock = threading.Lock()
-cache_building = False
+cache_building = Falses
 
 def initialize_db():
     conn = sqlite3.connect(DB_PATH)

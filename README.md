@@ -118,10 +118,10 @@ services:
       - SPOTIFY_USER_ID=<your-spotify-user-id>
       - DEEZER_USER_ID=<your-deezer-user-id>
       - DEEZER_PLAYLIST_ID=https://www.deezer.com/en/playlist/10484834882
-      - DB_PATH=/app/data/plexist.db  # Path for SQLite database
-      - CSV_PATH=/app/data  # Path for storing CSV files
+      - DB_PATH=/data/plexist.db  # Path for SQLite database
+      - CSV_PATH=/data  # Path for storing CSV files
     volumes:
-      - ./plexist_data:/app/data  # Ensure volume matches the paths in environment variables
+      - ./plexist_data:/data  # Ensure volume matches the paths in environment variables
     restart: unless-stopped
 ```
 

@@ -89,12 +89,13 @@ The will only run once unless you create a cronjob, etc. Docker is the recommend
 ### Volumes
 
 - Map a local directory to `/app/data` in the container to ensure persistent storage of the database and CSV files:
-
-Update the `compose.yaml` with your specific configurations, including API tokens and paths. A template is Here: [compose.yaml](https://github.com/gyarbij/plexist/blob/main/assets/compose.yaml)
-
   ```yaml
   volumes:
     - ./plexist_data:/data
+  ```
+
+### Compose
+Update the `compose.yaml` with your specific configurations, including API tokens and paths. A template is Here: [compose.yaml](https://github.com/gyarbij/plexist/blob/main/assets/compose.yaml)
 
 
 ```yaml
@@ -123,6 +124,7 @@ services:
       - ./plexist_data:/app/data  # Ensure volume matches the paths in environment variables
     restart: unless-stopped
 ```
+
 Run the following commands to start the Plexist service:
 
 ```bash

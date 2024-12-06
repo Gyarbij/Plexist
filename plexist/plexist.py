@@ -113,11 +113,28 @@ class PlexistApp:
                 time.sleep(60)  # Wait a bit before retrying
 
 def main():
-    # Get config path from command line or use default
-    config_path = sys.argv[1] if len(sys.argv) > 1 else 'config.json'
+    import argparse
+    import os
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default=None,
+                       help='Path to configuration file (YAML or JSON)')
+    args = parser.parse_args()
+    
+    # If no config specified, try to find one
+    if args.config is None:
+        config_dir = os.getenv('CONFIG_PATH', '/config')
+        for ext in ['yaml', 'yml', 'json']:
+            path = os.path.join(config_dir, f'config.{ext}')
+            if os.path.exists(path):
+                args.config = path
+                break
+        
+        if args.config is None:
+            raise FileNotFoundError("No configuration file found. Please create either config.yaml or config.json in the config directory")
     
     try:
-        app = PlexistApp(config_path)
+        app = PlexistApp(args.config)
         app.run()
     except Exception as e:
         logging.error(f"Fatal error: {e}")

@@ -26,31 +26,40 @@ cache_lock = threading.Lock()
 cache_building = False
 
 def initialize_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS plexist (
-        title TEXT,
-        artist TEXT,
-        album TEXT,
-        year INTEGER,
-        genre TEXT,
-        plex_id INTEGER
-    )
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS plex_cache (
-        key TEXT PRIMARY KEY,
-        title TEXT,
-        artist TEXT,
-        album TEXT,
-        year INTEGER,
-        genre TEXT,
-        plex_id INTEGER
-    )
-    ''')
-    conn.commit()
-    conn.close()
+    """Initialize the SQLite database with proper directory creation."""
+    try:
+        # Ensure the data directory exists
+        data_dir = os.path.dirname(DB_PATH)
+        os.makedirs(data_dir, exist_ok=True)
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS plexist (
+            title TEXT,
+            artist TEXT,
+            album TEXT,
+            year INTEGER,
+            genre TEXT,
+            plex_id INTEGER
+        )
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS plex_cache (
+            key TEXT PRIMARY KEY,
+            title TEXT,
+            artist TEXT,
+            album TEXT,
+            year INTEGER,
+            genre TEXT,
+            plex_id INTEGER
+        )
+        ''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Database initialization error: {e}")
+        raise
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_plex_tracks(plex: PlexServer, offset: int = 0, limit: int = 100) -> List[plexapi.audio.Track]:

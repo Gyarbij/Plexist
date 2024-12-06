@@ -28,9 +28,11 @@ COPY --chown=plexist:plexist . /app
 
 USER plexist
 
-RUN echo '{"users":[],"write_missing_as_csv":true,"add_playlist_poster":true,"add_playlist_description":true,"append_instead_of_sync":false,"seconds_to_wait":84000}' > /config/config.json.example
+# Create example configs in both formats
+RUN echo '{"users":[],"write_missing_as_csv":true,"add_playlist_poster":true,"add_playlist_description":true,"append_instead_of_sync":false,"seconds_to_wait":84000}' > /config/config.json.example && \
+    echo 'users: []\nwrite_missing_as_csv: true\nadd_playlist_poster: true\nadd_playlist_description: true\nappend_instead_of_sync: false\nseconds_to_wait: 84000' > /config/config.yaml.example
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import os; assert os.path.exists('/config/config.json')" || exit 1
+    CMD python -c "import os; assert any(os.path.exists(f'/config/config.{ext}') for ext in ['json', 'yaml', 'yml'])" || exit 1
 
-CMD ["python", "plexist/plexist.py", "--config", "/config/config.json"]
+CMD ["python", "plexist/plexist.py", "--config", "/config/config.yaml"]

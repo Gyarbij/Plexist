@@ -119,6 +119,45 @@ def load_cache_from_db():
     
     logging.info(f"Loaded {len(plex_tracks_cache)} tracks from the database cache")
 
+def get_plex_user_server(plex, username: str, is_managed: bool = False):
+    """
+    Get a PlexServer instance for a specific user.
+    
+    Args:
+        plex: Main PlexServer instance
+        username: Username of the Plex user
+        is_managed: Whether the user is a managed user
+        
+    Returns:
+        PlexServer instance for the user or None if not found
+    """
+    try:
+        if is_managed:
+            # For managed users, we need to switch the user context
+            for user in plex.myPlexAccount().users():
+                if user.username == username:
+                    # Switch to managed user context and return their server instance
+                    user_token = user.get_token(plex.machineIdentifier)
+                    return PlexServer(plex._baseurl, user_token)
+        else:
+            # For regular users, just return the main server instance
+            account = plex.myPlexAccount()
+            if account.username == username:
+                return plex
+            
+            # Check if user exists and has access
+            for user in account.users():
+                if user.username == username:
+                    user_token = user.get_token(plex.machineIdentifier)
+                    return PlexServer(plex._baseurl, user_token)
+                    
+        logging.error(f"User {username} not found or doesn't have access to the Plex server")
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error getting Plex server for user {username}: {e}")
+        return None
+
 def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     def match_track(track):
         return _match_single_track(plex, track)

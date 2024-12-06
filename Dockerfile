@@ -31,6 +31,6 @@ USER plexist
 RUN echo '{"users":[],"write_missing_as_csv":true,"add_playlist_poster":true,"add_playlist_description":true,"append_instead_of_sync":false,"seconds_to_wait":84000}' > /config/config.json.example
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import os; assert os.path.exists('${CONFIG_PATH}')" || exit 1
+    CMD python -c "import os; assert os.path.exists('/config/config.json')" || exit 1
 
-CMD ["python", "plexist/plexist.py", "--config", "${CONFIG_PATH}"]
+CMD ["python", "plexist/plexist.py", "--config", "/config/config.json"]

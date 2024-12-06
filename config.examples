@@ -1,0 +1,79 @@
+# config.json
+{
+  "users": [
+    {
+      "plex_user_name": "gyarbij",
+      "plex_url": "http://192.168.0.10:32400",
+      "plex_token": "PLEX_TOKEN_GYARBIJ",
+      "spotify_client_id": "SPOTIFY_CLIENT_ID_GYARBIJ",
+      "spotify_client_secret": "SPOTIFY_CLIENT_SECRET_GYARBIJ",
+      "spotify_user_id": "SPOTIFY_USER_ID_GYARBIJ",
+      "deezer_user_id": "DEEZER_USER_ID_GYARBIJ",
+      "deezer_playlist_ids": "10484834882 2039482304",
+      "is_managed_user": false
+    },
+    {
+      "plex_user_name": "minions",
+      "plex_url": "http://192.168.0.10:32400",
+      "plex_token": "PLEX_TOKEN_MINIONS",
+      "spotify_client_id": "SPOTIFY_CLIENT_ID_MINIONS",
+      "spotify_client_secret": "SPOTIFY_CLIENT_SECRET_MINIONS",
+      "spotify_user_id": "SPOTIFY_USER_ID_MINIONS",
+      "deezer_user_id": "",
+      "deezer_playlist_ids": "",
+      "is_managed_user": true
+    },
+    {
+      "plex_user_name": "spawn",
+      "plex_url": "http://192.168.0.10:32400",
+      "plex_token": "PLEX_TOKEN_SPAWN",
+      "spotify_client_id": "",
+      "spotify_client_secret": "",
+      "spotify_user_id": "",
+      "deezer_user_id": "DEEZER_USER_ID_SPAWN",
+      "deezer_playlist_ids": "10398484999",
+      "is_managed_user": false
+    }
+  ],
+  "write_missing_as_csv": true,
+  "add_playlist_poster": true,
+  "add_playlist_description": true,
+  "append_instead_of_sync": false,
+  "seconds_to_wait": 84000
+}
+
+# Alternative config.yaml
+users:
+  - plex_user_name: gyarbij
+    plex_url: http://192.168.0.10:32400
+    plex_token: PLEX_TOKEN_GYARBIJ
+    spotify_client_id: SPOTIFY_CLIENT_ID_GYARBIJ
+    spotify_client_secret: SPOTIFY_CLIENT_SECRET_GYARBIJ
+    spotify_user_id: SPOTIFY_USER_ID_GYARBIJ
+    deezer_user_id: DEEZER_USER_ID_GYARBIJ
+    deezer_playlist_ids: "10484834882 2039482304"
+    is_managed_user: false
+  - plex_user_name: minions
+    plex_url: http://192.168.0.10:32400
+    plex_token: PLEX_TOKEN_MINIONS
+    spotify_client_id: SPOTIFY_CLIENT_ID_MINIONS
+    spotify_client_secret: SPOTIFY_CLIENT_SECRET_MINIONS
+    spotify_user_id: SPOTIFY_USER_ID_MINIONS
+    deezer_user_id: ""
+    deezer_playlist_ids: ""
+    is_managed_user: true
+  - plex_user_name: spawn
+    plex_url: http://192.168.0.10:32400
+    plex_token: PLEX_TOKEN_SPAWN
+    spotify_client_id: ""
+    spotify_client_secret: ""
+    spotify_user_id: ""
+    deezer_user_id: DEEZER_USER_ID_SPAWN
+    deezer_playlist_ids: "10398484999"
+    is_managed_user: false
+
+write_missing_as_csv: true
+add_playlist_poster: true
+add_playlist_description: true
+append_instead_of_sync: false
+seconds_to_wait: 84000

@@ -20,12 +20,15 @@ from modules.plex import (
     get_plex_user_server
 )
 
+# Get log path from environment or use default in data directory
+log_path = os.path.join(os.getenv('DATA_DIR', '/data'), 'plexist.log')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('plexist.log')
+        logging.FileHandler(log_path)
     ]
 )
 

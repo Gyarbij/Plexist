@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 import logging
 import time
+import os
 import sys
+import deezer
+import spotipy
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
-
-import deezer
-import spotipy
 from plexapi.server import PlexServer
 from spotipy.oauth2 import SpotifyClientCredentials
-
+from modules.helperClasses import UserInputs
 from modules.config_handler import ConfigurationManager, UserConfig
 from modules.deezer import deezer_playlist_sync
 from modules.spotify import spotify_playlist_sync

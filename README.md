@@ -58,6 +58,7 @@ Configure the parameters as required. Plex URL and TOKEN are mandatory and the o
 
 ```
 docker run -d \
+  --volume /path/to/data:/data          # This is a mapped location to where you want the csv files to live
   --name=plexist \
   --restart unless-stopped \
   -e PLEX_URL=                          # <your local plex url>
@@ -91,6 +92,8 @@ services:
   plexist:
     container_name: plexist
     image: gyarbij/plexist:latest
+    volumes:
+      - /path/to/data:/data      # This is a mapped location to where you want the csv files to live
     environment:
       - PLEX_URL=                # your local plex url
       - PLEX_TOKEN=              # your plex token

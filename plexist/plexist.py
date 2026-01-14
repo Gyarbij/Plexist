@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
+import asyncio
 import logging
 import os
-import time
-import deezer
-import spotipy
+
 from plexapi.server import PlexServer
-from spotipy.oauth2 import SpotifyClientCredentials
-from modules.deezer import deezer_playlist_sync
-from modules.helperClasses import UserInputs
-from modules.spotify import spotify_playlist_sync
-from modules.plex import initialize_db, initialize_cache, configure_rate_limiting
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+from modules.base import ServiceRegistry
+from modules.helperClasses import UserInputs
+from modules.plex import initialize_db, initialize_cache, configure_rate_limiting
+
+# Provider registrations (import for side-effects)
+from modules import spotify  # noqa: F401
+from modules import deezer  # noqa: F401
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -35,10 +37,12 @@ def read_environment_variables():
     )
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def initialize_plex_server(user_inputs):
+async def initialize_plex_server(user_inputs):
     if user_inputs.plex_url and user_inputs.plex_token:
         try:
-            return PlexServer(user_inputs.plex_url, user_inputs.plex_token)
+            return await asyncio.to_thread(
+                PlexServer, user_inputs.plex_url, user_inputs.plex_token
+            )
         except Exception as e:
             logging.error(f"Plex Authorization error: {e}")
             raise  # Re-raise the exception to trigger retry
@@ -46,67 +50,30 @@ def initialize_plex_server(user_inputs):
         logging.error("Missing Plex Authorization Variables")
         return None
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def initialize_spotify_client(user_inputs):
-    if (
-        user_inputs.spotipy_client_id
-        and user_inputs.spotipy_client_secret
-        and user_inputs.spotify_user_id
-    ):
-        try:
-            return spotipy.Spotify(
-                auth_manager=SpotifyClientCredentials(
-                    user_inputs.spotipy_client_id,
-                    user_inputs.spotipy_client_secret,
-                )
-            )
-        except Exception as e:
-            logging.error(f"Spotify Authorization error: {e}")
-            raise  # Re-raise the exception to trigger retry
-    else:
-        logging.error("Missing one or more Spotify Authorization Variables")
-        return None
-
-def main():
-    initialize_db()
+async def main():
+    await initialize_db()
     user_inputs = read_environment_variables()
     
     # Configure rate limiting for Plex requests
-    configure_rate_limiting(user_inputs)
+    await configure_rate_limiting(user_inputs)
     
-    plex = initialize_plex_server(user_inputs)
+    plex = await initialize_plex_server(user_inputs)
 
     if plex is None:
         return
 
     # Initialize the cache
-    initialize_cache(plex)
+    await initialize_cache(plex)
 
     while True:
         logging.info("Starting playlist sync")
         
-        # Update the cache
-        #initialize_cache(plex)
-
-        # Spotify sync
-        logging.info("Starting Spotify playlist sync")
-        sp = initialize_spotify_client(user_inputs)
-        if sp is not None:
-            spotify_playlist_sync(sp, plex, user_inputs)
-            logging.info("Spotify playlist sync complete")
-        else:
-            logging.error("Spotify sync skipped due to authorization error")
-
-        # Deezer sync
-        logging.info("Starting Deezer playlist sync")
-        dz = deezer.Client()
-        deezer_playlist_sync(dz, plex, user_inputs)
-        logging.info("Deezer playlist sync complete")
+        await ServiceRegistry.sync_all(plex, user_inputs)
 
         logging.info("All playlist(s) sync complete")
         logging.info(f"Sleeping for {user_inputs.wait_seconds} seconds")
 
-        time.sleep(user_inputs.wait_seconds)
+        await asyncio.sleep(user_inputs.wait_seconds)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

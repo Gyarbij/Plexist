@@ -2,6 +2,8 @@
 #    uv pip compile requirements.in -o requirements.txt --python-version=3.14
 anyio==4.12.1
     # via httpx
+aiosqlite==0.21.0
+    # via -r requirements.in
 certifi==2026.1.4
     # via
     #   httpcore

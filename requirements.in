@@ -5,3 +5,4 @@ urllib3
 tenacity
 zipp
 requests
+aiosqlite

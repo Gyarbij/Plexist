@@ -1,18 +1,18 @@
+import asyncio
 import logging
 from typing import List
 
+import deezer
 from plexapi.server import PlexServer
 
-import deezer
-
+from .base import ServiceRegistry, MusicServiceProvider
 from .helperClasses import Playlist, Track, UserInputs
 from .plex import update_or_create_plex_playlist
 
 
-def _get_dz_playlists(
+async def _get_dz_playlists(
     dz: deezer.Client(),
     userInputs: UserInputs,
-    suffix: str = " - Deezer",
 ) -> List[Playlist]:
     """Get metadata for playlists in the given user_id.
 
@@ -28,25 +28,27 @@ def _get_dz_playlists(
 
     if userInputs.deezer_user_id:
         try:
-            dz_user_playlists = [
-                *dz.get_user(userInputs.deezer_user_id).get_playlists()
-            ]
-        except:
+            dz_user_playlists = await asyncio.to_thread(
+                lambda: [*dz.get_user(userInputs.deezer_user_id).get_playlists()]
+            )
+        except Exception as e:
             dz_user_playlists = []
             logging.info(
-                "Can't get playlists from this user, skipping deezer user"
-                " playlists"
+                "Can't get playlists from this user, skipping deezer user playlists: %s",
+                e,
             )
 
     if userInputs.deezer_playlist_ids:
         try:
             dz_playlist_ids = userInputs.deezer_playlist_ids.split()
-            dz_id_playlists = [dz.get_playlist(id) for id in dz_playlist_ids]
-        except:
+            dz_id_playlists = await asyncio.to_thread(
+                lambda: [dz.get_playlist(id) for id in dz_playlist_ids]
+            )
+        except Exception as e:
             dz_id_playlists = []
             logging.info(
-                "Unable to get the playlists from given ids, skipping deezer"
-                " playlists for IDs"
+                "Unable to get the playlists from given ids, skipping deezer playlists for IDs: %s",
+                e,
             )
 
     dz_playlists = list(set(dz_user_playlists + dz_id_playlists))
@@ -65,10 +67,10 @@ def _get_dz_playlists(
             )
     return playlists
 
-def _get_dz_tracks_from_playlist(  
-    dz: deezer.Client(),  
-    playlist: Playlist,  
-) -> List[Track]:  
+async def _get_dz_tracks_from_playlist(
+    dz: deezer.Client(),
+    playlist: Playlist,
+) -> List[Track]:
     """Return list of tracks with metadata.  
   
     Args:  
@@ -78,8 +80,8 @@ def _get_dz_tracks_from_playlist(
     Returns:  
         List[Track]: list of Track objects with track metadata fields  
     """  
-    dz_playlist = dz.get_playlist(playlist.id)  
-    tracks = dz_playlist.get_tracks()  
+    dz_playlist = await asyncio.to_thread(dz.get_playlist, playlist.id)
+    tracks = await asyncio.to_thread(dz_playlist.get_tracks)
     return [extract_dz_track_metadata(track) for track in tracks]
 
 def extract_dz_track_metadata(track):
@@ -93,19 +95,32 @@ def extract_dz_track_metadata(track):
     return Track(title, artist, album, url, year, genre)  # Assuming Track class is modified to include year and genre
 
 
-def deezer_playlist_sync(
-    dz: deezer.Client(), plex: PlexServer, userInputs: UserInputs
-) -> None:
-    """Create/Update plex playlists with playlists from deezer.
 
-    Args:
-        dz (deezer.Client):  Deezer Client (no credentials needed)
-        plex (PlexServer): A configured PlexServer instance
-    """
-    playlists = _get_dz_playlists(dz, userInputs)
-    if playlists:
-        for playlist in playlists:
-            tracks = _get_dz_tracks_from_playlist(dz, playlist)
-            update_or_create_plex_playlist(plex, playlist, tracks, userInputs)
-    else:
-        logging.error("No deezer playlists found for given user")
+@ServiceRegistry.register
+class DeezerProvider(MusicServiceProvider):
+    name = "deezer"
+
+    def is_configured(self, user_inputs: UserInputs) -> bool:
+        return bool(user_inputs.deezer_user_id or user_inputs.deezer_playlist_ids)
+
+    async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
+        dz = deezer.Client()
+        return await _get_dz_playlists(dz, user_inputs)
+
+    async def get_tracks(
+        self, playlist: Playlist, user_inputs: UserInputs
+    ) -> List[Track]:
+        dz = deezer.Client()
+        return await _get_dz_tracks_from_playlist(dz, playlist)
+
+    async def sync(self, plex: PlexServer, user_inputs: UserInputs) -> None:
+        dz = deezer.Client()
+        playlists = await _get_dz_playlists(dz, user_inputs)
+        if playlists:
+            for playlist in playlists:
+                tracks = await _get_dz_tracks_from_playlist(dz, playlist)
+                await update_or_create_plex_playlist(
+                    plex, playlist, tracks, user_inputs
+                )
+        else:
+            logging.error("No deezer playlists found for given user")

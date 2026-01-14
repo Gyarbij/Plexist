@@ -7,3 +7,4 @@ zipp
 requests
 aiosqlite
 pydantic-settings
+pydantic

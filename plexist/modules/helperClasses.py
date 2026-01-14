@@ -31,6 +31,10 @@ class UserInputs:
     append_instead_of_sync: bool
     wait_seconds: int
 
+    # Rate limiting settings
+    max_requests_per_second: float
+    max_concurrent_requests: int
+
     spotipy_client_id: str
     spotipy_client_secret: str
     spotify_user_id: str

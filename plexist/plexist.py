@@ -10,7 +10,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from modules.deezer import deezer_playlist_sync
 from modules.helperClasses import UserInputs
 from modules.spotify import spotify_playlist_sync
-from modules.plex import initialize_db, initialize_cache
+from modules.plex import initialize_db, initialize_cache, configure_rate_limiting
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,6 +25,8 @@ def read_environment_variables():
         add_playlist_description=os.getenv("ADD_PLAYLIST_DESCRIPTION", "1") == "1",
         append_instead_of_sync=os.getenv("APPEND_INSTEAD_OF_SYNC", "False") == "1",
         wait_seconds=int(os.getenv("SECONDS_TO_WAIT", 86400)),
+        max_requests_per_second=float(os.getenv("MAX_REQUESTS_PER_SECOND", "5")),
+        max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "4")),
         spotipy_client_id=os.getenv("SPOTIFY_CLIENT_ID"),
         spotipy_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
         spotify_user_id=os.getenv("SPOTIFY_USER_ID"),
@@ -68,6 +70,10 @@ def initialize_spotify_client(user_inputs):
 def main():
     initialize_db()
     user_inputs = read_environment_variables()
+    
+    # Configure rate limiting for Plex requests
+    configure_rate_limiting(user_inputs)
+    
     plex = initialize_plex_server(user_inputs)
 
     if plex is None:

@@ -68,6 +68,8 @@ docker run -d \
   -e ADD_PLAYLIST_DESCRIPTION=          # <1 or 0>, Default 1, 1 = add description for each playlist
   -e APPEND_INSTEAD_OF_SYNC=            # <0 or 1>, Default 0, 1 = Sync tracks, 0 = Append only
   -e SECONDS_TO_WAIT=84000              # Seconds to wait between syncs
+  -e MAX_REQUESTS_PER_SECOND=5          # Max Plex API requests per second (Default 5, lower for slow servers)
+  -e MAX_CONCURRENT_REQUESTS=4          # Max concurrent Plex requests (Default 4, lower to reduce CPU load)
   -e SPOTIFY_CLIENT_ID=                 # Your Spotify Client/App ID
   -e SPOTIFY_CLIENT_SECRET=             # Your Spotify client secret
   -e SPOTIFY_USER_ID=                   # Spotify ID to sync (Sync's all playlist)
@@ -79,6 +81,16 @@ docker run -d \
 #### Notes
 - Include `http://` or `https://` in the PLEX_URL
 - Remove comments (e.g.  `# Optional x`) before running 
+
+#### Rate Limiting for Slower Servers
+If your Plex server has limited CPU resources (e.g., Synology NAS, Raspberry Pi, or older hardware) and you experience high CPU usage or connection pool warnings like `Connection pool is full, discarding connection`, try lowering the rate limiting settings:
+
+```
+-e MAX_REQUESTS_PER_SECOND=2
+-e MAX_CONCURRENT_REQUESTS=2
+```
+
+This will significantly reduce the load on your Plex server at the cost of slightly longer sync times.
 
 ### Docker Compose
 
@@ -101,6 +113,8 @@ services:
       - ADD_PLAYLIST_DESCRIPTION=# <1 or 0>, Default 1, 1 = add description for each playlist
       - APPEND_INSTEAD_OF_SYNC=  # <0 or 1>, Default 0, 1 = Sync tracks, 0 = Append only
       - SECONDS_TO_WAIT=84000    # Seconds to wait between syncs
+      - MAX_REQUESTS_PER_SECOND=5  # Max Plex API requests per second (Default 5)
+      - MAX_CONCURRENT_REQUESTS=4  # Max concurrent Plex requests (Default 4)
       - SPOTIFY_CLIENT_ID=       # your spotify client id
       - SPOTIFY_CLIENT_SECRET=   # your spotify client secret
       - SPOTIFY_USER_ID=         # your spotify user id

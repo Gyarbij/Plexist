@@ -11,6 +11,8 @@ services:
       - ADD_PLAYLIST_DESCRIPTION=1
       - APPEND_INSTEAD_OF_SYNC=0
       - SECONDS_TO_WAIT=84000
+      - MAX_REQUESTS_PER_SECOND=5
+      - MAX_CONCURRENT_REQUESTS=4
       - SPOTIFY_CLIENT_ID=<your spotify client id>
       - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
       - SPOTIFY_USER_ID=<your spotify user id>

@@ -4,7 +4,7 @@ import logging
 import pathlib
 import sys
 from difflib import SequenceMatcher
-from typing import List, Dict
+from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 import plexapi
 from plexapi.exceptions import BadRequest, NotFound
@@ -19,6 +19,36 @@ import json
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 DB_PATH = os.getenv('DB_PATH', 'plexist.db')
+
+# Rate limiter class for controlling request frequency
+class RateLimiter:
+    """Token bucket rate limiter for controlling request frequency to Plex."""
+    
+    def __init__(self, max_requests_per_second: float = 5.0):
+        self.max_requests_per_second = max_requests_per_second
+        self.min_interval = 1.0 / max_requests_per_second if max_requests_per_second > 0 else 0
+        self.last_request_time = 0.0
+        self._lock = threading.Lock()
+    
+    def acquire(self) -> None:
+        """Wait until a request can be made within rate limits."""
+        with self._lock:
+            now = time.time()
+            time_since_last = now - self.last_request_time
+            if time_since_last < self.min_interval:
+                sleep_time = self.min_interval - time_since_last
+                time.sleep(sleep_time)
+            self.last_request_time = time.time()
+    
+    def update_rate(self, max_requests_per_second: float) -> None:
+        """Update the rate limit."""
+        with self._lock:
+            self.max_requests_per_second = max_requests_per_second
+            self.min_interval = 1.0 / max_requests_per_second if max_requests_per_second > 0 else 0
+
+# Global rate limiter instance
+plex_rate_limiter = RateLimiter()
+max_concurrent_workers = 4  # Default, will be updated from UserInputs
 
 # Global cache for Plex tracks
 plex_tracks_cache = {}
@@ -54,6 +84,7 @@ def initialize_db():
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_plex_tracks(plex: PlexServer, offset: int = 0, limit: int = 100) -> List[plexapi.audio.Track]:
+    plex_rate_limiter.acquire()
     return plex.library.search(libtype="track", container_start=offset, container_size=limit)
 
 def fetch_and_cache_tracks(plex: PlexServer):
@@ -63,21 +94,29 @@ def fetch_and_cache_tracks(plex: PlexServer):
 
     cache_building = True
     offset = 0
-    limit = 100
+    limit = 500  # Larger batches to reduce total request count
 
     def background_fetch():
         nonlocal offset
         while True:
-            tracks = fetch_plex_tracks(plex, offset, limit)
-            if not tracks:
-                break
-            with cache_lock:
-                for track in tracks:
-                    key = f"{track.title}|{track.artist().title}|{track.album().title}"
-                    plex_tracks_cache[key] = track
-            offset += limit
-            _update_db_cache_bulk(dict(list(plex_tracks_cache.items())[-len(tracks):]))
-            logging.info(f"Fetched and cached {len(plex_tracks_cache)} tracks so far...")
+            try:
+                tracks = fetch_plex_tracks(plex, offset, limit)
+                if not tracks:
+                    break
+                with cache_lock:
+                    for track in tracks:
+                        key = f"{track.title}|{track.artist().title}|{track.album().title}"
+                        plex_tracks_cache[key] = track
+                offset += limit
+                _update_db_cache_bulk(dict(list(plex_tracks_cache.items())[-len(tracks):]))
+                logging.info(f"Fetched and cached {len(plex_tracks_cache)} tracks so far...")
+                # Add delay between batches to reduce server load
+                time.sleep(0.5)
+            except Exception as e:
+                logging.error(f"Error fetching tracks at offset {offset}: {e}")
+                # On error, wait longer before retrying
+                time.sleep(2.0)
+                continue
         
         global cache_building
         cache_building = False
@@ -123,7 +162,8 @@ def _get_available_plex_tracks(plex: PlexServer, tracks: List[Track]) -> List:
     def match_track(track):
         return _match_single_track(plex, track)
     
-    with ThreadPoolExecutor() as executor:
+    # Use limited concurrency to avoid overwhelming Plex server
+    with ThreadPoolExecutor(max_workers=max_concurrent_workers) as executor:
         results = list(executor.map(match_track, tracks))
     
     plex_tracks = [result[0] for result in results if result[0]]
@@ -166,6 +206,7 @@ def _match_single_track(plex: PlexServer, track: Track):
         # If no good match in cache, search Plex directly
         if best_score < threshold:
             try:
+                plex_rate_limiter.acquire()
                 search = plex.search(query, mediatype="track", limit=20)
                 for s in search:
                     score = 0
@@ -238,6 +279,16 @@ def initialize_cache(plex: PlexServer):
     load_cache_from_db()
     if not plex_tracks_cache:
         fetch_and_cache_tracks(plex)
+
+def configure_rate_limiting(user_inputs: UserInputs) -> None:
+    """Configure rate limiting based on user settings."""
+    global max_concurrent_workers
+    plex_rate_limiter.update_rate(user_inputs.max_requests_per_second)
+    max_concurrent_workers = user_inputs.max_concurrent_requests
+    logging.info(
+        f"Rate limiting configured: {user_inputs.max_requests_per_second} req/s, "
+        f"{user_inputs.max_concurrent_requests} concurrent workers"
+    )
 
 def get_matched_song(title, artist, album):  
     conn = sqlite3.connect(DB_PATH)  

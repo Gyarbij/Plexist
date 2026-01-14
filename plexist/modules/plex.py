@@ -13,6 +13,8 @@ from .helperClasses import Playlist, Track, UserInputs
 from tenacity import retry, stop_after_attempt, wait_exponential
 import threading
 import time
+import csv
+import json
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -314,19 +316,33 @@ def update_or_create_plex_playlist(
     else:
         logging.warning("No songs for playlist %s were found on Plex, skipping the playlist creation", playlist.name)
 
-    if userInputs.write_missing_as_csv:
+    if userInputs.write_missing_as_csv or userInputs.write_missing_as_json:
         if missing_tracks:
-            try:
-                _write_csv(missing_tracks, playlist.name)
-                logging.info("Missing tracks written to %s.csv", playlist.name)
-            except Exception as e:
-                logging.error("Failed to write missing tracks for %s: %s", playlist.name, str(e))
+            if userInputs.write_missing_as_csv:
+                try:
+                    _write_csv(missing_tracks, playlist.name)
+                    logging.info("Missing tracks written to %s.csv", playlist.name)
+                except Exception as e:
+                    logging.error("Failed to write missing tracks for %s: %s", playlist.name, str(e))
+            if userInputs.write_missing_as_json:
+                try:
+                    _write_json(missing_tracks, playlist.name)
+                    logging.info("Missing tracks written to %s.json", playlist.name)
+                except Exception as e:
+                    logging.error("Failed to write missing tracks for %s: %s", playlist.name, str(e))
         else:
-            try:
-                _delete_csv(playlist.name)
-                logging.info("Deleted old %s.csv as no missing tracks found", playlist.name)
-            except Exception as e:
-                logging.error("Failed to delete %s.csv: %s", playlist.name, str(e))
+            if userInputs.write_missing_as_csv:
+                try:
+                    _delete_file(playlist.name, "csv")
+                    logging.info("Deleted old %s.csv as no missing tracks found", playlist.name)
+                except Exception as e:
+                    logging.error("Failed to delete %s.csv: %s", playlist.name, str(e))
+            if userInputs.write_missing_as_json:
+                try:
+                    _delete_file(playlist.name, "json")
+                    logging.info("Deleted old %s.json as no missing tracks found", playlist.name)
+                except Exception as e:
+                    logging.error("Failed to delete %s.json: %s", playlist.name, str(e))
 
 def _write_csv(tracks: List[Track], name: str, path: str = "/data") -> None:
     data_folder = pathlib.Path(path)
@@ -340,10 +356,29 @@ def _write_csv(tracks: List[Track], name: str, path: str = "/data") -> None:
                 [track.title, track.artist, track.album, track.url]
             )
 
-def _delete_csv(name: str, path: str = "/data") -> None:
+def _write_json(tracks: List[Track], name: str, path: str = "/data") -> None:
     data_folder = pathlib.Path(path)
-    file = data_folder / f"{name}.csv"
-    file.unlink()
+    data_folder.mkdir(parents=True, exist_ok=True)
+    file = data_folder / f"{name}.json"
+    tracks_data = [
+        {
+            "title": track.title,
+            "artist": track.artist,
+            "album": track.album,
+            "url": track.url,
+            "year": track.year,
+            "genre": track.genre
+        }
+        for track in tracks
+    ]
+    with open(file, "w", encoding="utf-8") as jsonfile:
+        json.dump({"playlist": name, "missing_tracks": tracks_data}, jsonfile, indent=2, ensure_ascii=False)
+
+def _delete_file(name: str, extension: str, path: str = "/data") -> None:
+    data_folder = pathlib.Path(path)
+    file = data_folder / f"{name}.{extension}"
+    if file.exists():
+        file.unlink()
 
 def end_session():
     if 'conn' in locals() or 'conn' in globals():

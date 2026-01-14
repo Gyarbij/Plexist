@@ -6,3 +6,4 @@ tenacity
 zipp
 requests
 aiosqlite
+pydantic-settings

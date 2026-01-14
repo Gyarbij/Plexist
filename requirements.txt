@@ -26,6 +26,10 @@ idna==3.11
     #   requests
 plexapi==4.17.2
     # via -r requirements.in
+pydantic==2.10.6
+    # via pydantic-settings
+pydantic-settings==2.7.1
+    # via -r requirements.in
 redis==7.1.0
     # via spotipy
 requests==2.32.5

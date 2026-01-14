@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -21,8 +22,8 @@ class Playlist:
 
 @dataclass
 class UserInputs:
-    plex_url: str
-    plex_token: str
+    plex_url: Optional[str]
+    plex_token: Optional[str]
 
     write_missing_as_csv: bool
     write_missing_as_json: bool
@@ -35,9 +36,9 @@ class UserInputs:
     max_requests_per_second: float
     max_concurrent_requests: int
 
-    spotipy_client_id: str
-    spotipy_client_secret: str
-    spotify_user_id: str
+    spotipy_client_id: Optional[str]
+    spotipy_client_secret: Optional[str]
+    spotify_user_id: Optional[str]
 
-    deezer_user_id: str
-    deezer_playlist_ids: str
+    deezer_user_id: Optional[str]
+    deezer_playlist_ids: Optional[str]

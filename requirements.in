@@ -14,4 +14,3 @@ aiolimiter
 aiohttp
 PyJWT
 cryptography
-pytest-asyncio

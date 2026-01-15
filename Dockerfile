@@ -12,11 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libsqlite3-0 \
       libgcc-s1 \
       libstdc++6 \
+      build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/python -m pip install --upgrade pip \
- && /opt/venv/bin/pip install --no-cache-dir --only-binary=:all: --no-deps -r requirements.txt
+ && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # ---------- runtime ----------
 FROM gcr.io/distroless/cc-debian13:nonroot AS runtime

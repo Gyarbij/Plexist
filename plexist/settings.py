@@ -76,6 +76,9 @@ class PlexistSettings(BaseSettings):
     deezer_playlist_ids: Optional[str] = Field(
         default=None, validation_alias="DEEZER_PLAYLIST_ID"
     )
+    deezer_access_token: Optional[str] = Field(
+        default=None, validation_alias="DEEZER_ACCESS_TOKEN"
+    )
     sync_liked_tracks: FlexibleBool = Field(
         default=False, validation_alias="SYNC_LIKED_TRACKS"
     )
@@ -190,6 +193,7 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         spotify_user_id=settings.spotify_user_id,
         deezer_user_id=settings.deezer_user_id,
         deezer_playlist_ids=settings.deezer_playlist_ids,
+        deezer_access_token=settings.deezer_access_token,
         apple_music_team_id=settings.apple_music_team_id,
         apple_music_key_id=settings.apple_music_key_id,
         apple_music_private_key=settings.apple_music_private_key,

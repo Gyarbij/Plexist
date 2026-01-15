@@ -4,8 +4,6 @@ import json
 import logging
 import os
 import pathlib
-import sys
-import time
 from difflib import SequenceMatcher
 from typing import Dict, List
 
@@ -20,6 +18,10 @@ from .helperClasses import Playlist, Track, UserInputs
 
 
 DB_PATH = os.getenv("DB_PATH", "plexist.db")
+
+# Configuration constants
+PLEX_BATCH_SIZE = 500  # Number of tracks to fetch per Plex API request
+MAX_SEARCH_CANDIDATES = 500  # Maximum tracks to consider when no index match found
 
 # Global rate limiter instance (aiolimiter)
 plex_rate_limiter = AsyncLimiter(5, 1)
@@ -104,7 +106,7 @@ async def fetch_and_cache_tracks(plex: PlexServer) -> None:
         cache_building = True
 
     offset = 0
-    limit = 500  # Larger batches to reduce total request count
+    limit = PLEX_BATCH_SIZE
 
     try:
         while True:
@@ -222,7 +224,7 @@ async def _match_single_track(plex: PlexServer, track: Track):
                 ):
                     candidates.append(s)
             if not candidates:
-                candidates = list(plex_tracks_cache.values())[:500]
+                candidates = list(plex_tracks_cache.values())[:MAX_SEARCH_CANDIDATES]
 
         for s in candidates:
             score = 0
@@ -361,8 +363,7 @@ async def configure_rate_limiting(user_inputs: UserInputs) -> None:
     plex_rate_limiter = AsyncLimiter(user_inputs.max_requests_per_second, 1)
     max_concurrent_workers = user_inputs.max_concurrent_requests
     logging.info(
-        f"Rate limiting configured: {user_inputs.max_requests_per_second} req/s, "
-        f"{user_inputs.max_concurrent_requests} concurrent workers"
+        f"Rate limiting configured: {user_inputs.max_requests_per_second} req/s, {user_inputs.max_concurrent_requests} concurrent workers"
     )
 
 async def get_matched_song(title, artist, album):
@@ -417,7 +418,8 @@ async def update_or_create_plex_playlist(
 
     if available_tracks:
         try:
-            plex_playlist = await asyncio.to_thread(plex.playlist, playlist.name)
+            # Check if playlist exists (will raise NotFound if not)
+            await asyncio.to_thread(plex.playlist, playlist.name)
             plex_playlist = await _update_plex_playlist(
                 plex=plex,
                 available_tracks=available_tracks,

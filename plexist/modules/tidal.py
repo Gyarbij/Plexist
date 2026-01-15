@@ -475,13 +475,14 @@ class TidalProvider(MusicServiceProvider):
     async def sync(self, plex: PlexServer, user_inputs: UserInputs) -> None:
         """Sync Tidal playlists and liked tracks to Plex."""
         public_ids = _parse_playlist_ids(user_inputs.tidal_public_playlist_ids)
-        session = await _create_authenticated_session(user_inputs)
-        has_auth = session is not None
         timeout_seconds = user_inputs.tidal_request_timeout_seconds or 10
         max_retries = user_inputs.tidal_max_retries or 3
         retry_backoff_seconds = user_inputs.tidal_retry_backoff_seconds or 1.0
         
         try:
+            session = await _create_authenticated_session(user_inputs)
+            has_auth = session is not None
+            
             # Sync public playlists
             if public_ids:
                 # Use authenticated session if available, otherwise create public session

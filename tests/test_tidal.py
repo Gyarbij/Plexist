@@ -321,8 +321,8 @@ class TestCreateAuthenticatedSession:
             mock_session.check_login = MagicMock(return_value=True)
             MockSession.return_value = mock_session
             
-            with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-                mock_to_thread.side_effect = [True, True]  # load_oauth_session, check_login
+            with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+                mock_with_retries.side_effect = [True, True]  # load_oauth_session, check_login
                 
                 session = await _create_authenticated_session(mock_user_inputs)
         
@@ -341,8 +341,8 @@ class TestCreateAuthenticatedSession:
             mock_session = MagicMock()
             MockSession.return_value = mock_session
             
-            with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-                mock_to_thread.side_effect = [False]  # load_oauth_session fails
+            with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+                mock_with_retries.side_effect = [False]  # load_oauth_session fails
                 
                 session = await _create_authenticated_session(mock_user_inputs)
         
@@ -355,8 +355,8 @@ class TestCreateAuthenticatedSession:
             mock_session = MagicMock()
             MockSession.return_value = mock_session
             
-            with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-                mock_to_thread.side_effect = [True, False]  # load succeeds, check_login fails
+            with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+                mock_with_retries.side_effect = [True, False]  # load succeeds, check_login fails
                 
                 session = await _create_authenticated_session(mock_user_inputs)
         
@@ -375,8 +375,8 @@ class TestGetTidalPlaylists:
         mock_user.playlists = MagicMock(return_value=[mock_playlist])
         mock_session.user = mock_user
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.return_value = [mock_playlist]
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            mock_with_retries.side_effect = [mock_user, [mock_playlist]]
             
             playlists = await _get_tidal_playlists(mock_session, 10, 3, 1.0)
         
@@ -389,8 +389,8 @@ class TestGetTidalPlaylists:
         mock_session = MagicMock()
         mock_session.user = None
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.return_value = None
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            mock_with_retries.return_value = None
             
             playlists = await _get_tidal_playlists(mock_session, 10, 3, 1.0)
         
@@ -401,8 +401,8 @@ class TestGetTidalPlaylists:
         """Test that exceptions are handled gracefully."""
         mock_session = MagicMock()
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.side_effect = Exception("API Error")
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            mock_with_retries.side_effect = Exception("API Error")
             
             playlists = await _get_tidal_playlists(mock_session, 10, 0, 0.0)
         
@@ -427,8 +427,8 @@ class TestGetTidalTracksFromPlaylist:
             poster="",
         )
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.side_effect = [mock_tidal_playlist, [mock_track]]
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            mock_with_retries.side_effect = [mock_tidal_playlist, [mock_track]]
             
             tracks = await _get_tidal_tracks_from_playlist(mock_session, test_playlist, 10, 3, 1.0)
         
@@ -447,8 +447,8 @@ class TestGetTidalTracksFromPlaylist:
             poster="",
         )
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.return_value = None
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            mock_with_retries.return_value = None
             
             tracks = await _get_tidal_tracks_from_playlist(mock_session, test_playlist, 10, 3, 1.0)
         
@@ -469,8 +469,9 @@ class TestGetTidalFavoriteTracks:
         mock_user.favorites = mock_favorites
         mock_session.user = mock_user
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.return_value = [mock_track]
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            # 3 calls: get user, get favorites, get favorite tracks
+            mock_with_retries.side_effect = [mock_user, mock_favorites, [mock_track]]
             
             tracks = await _get_tidal_favorite_tracks(mock_session, 10, 3, 1.0)
         
@@ -483,8 +484,8 @@ class TestGetTidalFavoriteTracks:
         mock_session = MagicMock()
         mock_session.user = None
         
-        with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.return_value = None
+        with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
+            mock_with_retries.return_value = None
             
             tracks = await _get_tidal_favorite_tracks(mock_session, 10, 3, 1.0)
         

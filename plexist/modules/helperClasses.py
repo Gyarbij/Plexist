@@ -22,58 +22,58 @@ class Playlist:
 
 @dataclass
 class UserInputs:
-    plex_url: Optional[str]
-    plex_token: Optional[str]
+    plex_url: Optional[str] = None
+    plex_token: Optional[str] = None
 
-    write_missing_as_csv: bool
-    write_missing_as_json: bool
-    add_playlist_poster: bool
-    add_playlist_description: bool
-    append_instead_of_sync: bool
-    wait_seconds: int
+    write_missing_as_csv: bool = False
+    write_missing_as_json: bool = False
+    add_playlist_poster: bool = True
+    add_playlist_description: bool = True
+    append_instead_of_sync: bool = False
+    wait_seconds: int = 86400
 
     # Rate limiting settings
-    max_requests_per_second: float
-    max_concurrent_requests: int
+    max_requests_per_second: float = 5.0
+    max_concurrent_requests: int = 4
 
     # Liked/Favorited tracks sync
-    sync_liked_tracks: bool
+    sync_liked_tracks: bool = False
 
-    spotipy_client_id: Optional[str]
-    spotipy_client_secret: Optional[str]
-    spotify_user_id: Optional[str]
+    spotipy_client_id: Optional[str] = None
+    spotipy_client_secret: Optional[str] = None
+    spotify_user_id: Optional[str] = None
 
-    deezer_user_id: Optional[str]
-    deezer_playlist_ids: Optional[str]
+    deezer_user_id: Optional[str] = None
+    deezer_playlist_ids: Optional[str] = None
 
     # Apple Music settings
-    apple_music_team_id: Optional[str]
-    apple_music_key_id: Optional[str]
-    apple_music_private_key: Optional[str]
-    apple_music_user_token: Optional[str]
-    apple_music_public_playlist_ids: Optional[str]
-    apple_music_storefront: Optional[str]
-    apple_music_developer_token_ttl_seconds: Optional[int]
-    apple_music_request_timeout_seconds: Optional[int]
-    apple_music_max_retries: Optional[int]
-    apple_music_retry_backoff_seconds: Optional[float]
+    apple_music_team_id: Optional[str] = None
+    apple_music_key_id: Optional[str] = None
+    apple_music_private_key: Optional[str] = None
+    apple_music_user_token: Optional[str] = None
+    apple_music_public_playlist_ids: Optional[str] = None
+    apple_music_storefront: Optional[str] = None
+    apple_music_developer_token_ttl_seconds: Optional[int] = 43200
+    apple_music_request_timeout_seconds: Optional[int] = 10
+    apple_music_max_retries: Optional[int] = 3
+    apple_music_retry_backoff_seconds: Optional[float] = 1.0
 
     # Tidal settings
-    tidal_access_token: Optional[str]
-    tidal_refresh_token: Optional[str]
-    tidal_token_expiry: Optional[str]
-    tidal_public_playlist_ids: Optional[str]
-    tidal_request_timeout_seconds: Optional[int]
-    tidal_max_retries: Optional[int]
-    tidal_retry_backoff_seconds: Optional[float]
+    tidal_access_token: Optional[str] = None
+    tidal_refresh_token: Optional[str] = None
+    tidal_token_expiry: Optional[str] = None
+    tidal_public_playlist_ids: Optional[str] = None
+    tidal_request_timeout_seconds: Optional[int] = 10
+    tidal_max_retries: Optional[int] = 3
+    tidal_retry_backoff_seconds: Optional[float] = 1.0
 
     # Qobuz settings
-    qobuz_app_id: Optional[str]
-    qobuz_app_secret: Optional[str]
-    qobuz_username: Optional[str]
-    qobuz_password: Optional[str]
-    qobuz_user_auth_token: Optional[str]
-    qobuz_public_playlist_ids: Optional[str]
-    qobuz_request_timeout_seconds: Optional[int]
-    qobuz_max_retries: Optional[int]
-    qobuz_retry_backoff_seconds: Optional[float]
+    qobuz_app_id: Optional[str] = None
+    qobuz_app_secret: Optional[str] = None
+    qobuz_username: Optional[str] = None
+    qobuz_password: Optional[str] = None
+    qobuz_user_auth_token: Optional[str] = None
+    qobuz_public_playlist_ids: Optional[str] = None
+    qobuz_request_timeout_seconds: Optional[int] = 10
+    qobuz_max_retries: Optional[int] = 3
+    qobuz_retry_backoff_seconds: Optional[float] = 1.0

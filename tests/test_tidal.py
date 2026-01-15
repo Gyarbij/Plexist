@@ -378,7 +378,7 @@ class TestGetTidalPlaylists:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.return_value = [mock_playlist]
             
-            playlists = await _get_tidal_playlists(mock_session)
+            playlists = await _get_tidal_playlists(mock_session, 10, 3, 1.0)
         
         assert len(playlists) == 1
         assert playlists[0].name == "My Test Playlist"
@@ -392,7 +392,7 @@ class TestGetTidalPlaylists:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.return_value = None
             
-            playlists = await _get_tidal_playlists(mock_session)
+            playlists = await _get_tidal_playlists(mock_session, 10, 3, 1.0)
         
         assert playlists == []
 
@@ -404,7 +404,7 @@ class TestGetTidalPlaylists:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.side_effect = Exception("API Error")
             
-            playlists = await _get_tidal_playlists(mock_session)
+            playlists = await _get_tidal_playlists(mock_session, 10, 0, 0.0)
         
         assert playlists == []
 
@@ -430,7 +430,7 @@ class TestGetTidalTracksFromPlaylist:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.side_effect = [mock_tidal_playlist, [mock_track]]
             
-            tracks = await _get_tidal_tracks_from_playlist(mock_session, test_playlist)
+            tracks = await _get_tidal_tracks_from_playlist(mock_session, test_playlist, 10, 3, 1.0)
         
         assert len(tracks) == 1
         assert tracks[0].title == "Test Song"
@@ -450,7 +450,7 @@ class TestGetTidalTracksFromPlaylist:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.return_value = None
             
-            tracks = await _get_tidal_tracks_from_playlist(mock_session, test_playlist)
+            tracks = await _get_tidal_tracks_from_playlist(mock_session, test_playlist, 10, 3, 1.0)
         
         assert tracks == []
 
@@ -472,7 +472,7 @@ class TestGetTidalFavoriteTracks:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.return_value = [mock_track]
             
-            tracks = await _get_tidal_favorite_tracks(mock_session)
+            tracks = await _get_tidal_favorite_tracks(mock_session, 10, 3, 1.0)
         
         assert len(tracks) == 1
         assert tracks[0].title == "Test Song"
@@ -486,7 +486,7 @@ class TestGetTidalFavoriteTracks:
         with patch("modules.tidal.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
             mock_to_thread.return_value = None
             
-            tracks = await _get_tidal_favorite_tracks(mock_session)
+            tracks = await _get_tidal_favorite_tracks(mock_session, 10, 3, 1.0)
         
         assert tracks == []
 

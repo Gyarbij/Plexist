@@ -81,7 +81,15 @@ def initialize_spotify_client(user_inputs):
         return None
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def initialize_tidal_session(user_inputs):
+def initialize_tidal_session(user_inputs: UserInputs) -> tidalapi.Session:
+    """Initialize Tidal session with user credentials.
+    
+    Args:
+        user_inputs: User configuration containing Tidal credentials
+        
+    Returns:
+        Authenticated Tidal session or None if credentials are missing or invalid
+    """
     if user_inputs.tidal_username and user_inputs.tidal_password:
         try:
             session = tidalapi.Session()
@@ -95,7 +103,15 @@ def initialize_tidal_session(user_inputs):
         return None
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def initialize_qobuz_client(user_inputs):
+def initialize_qobuz_client(user_inputs: UserInputs):
+    """Initialize Qobuz client with APP_ID.
+    
+    Args:
+        user_inputs: User configuration containing Qobuz APP_ID
+        
+    Returns:
+        Qobuz module with registered APP_ID or None if APP_ID is missing
+    """
     if user_inputs.qobuz_app_id:
         try:
             qobuz.api.register_app(user_inputs.qobuz_app_id)

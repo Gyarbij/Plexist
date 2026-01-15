@@ -28,6 +28,12 @@ def test_settings_from_environment(monkeypatch):
     monkeypatch.setenv("APPLE_MUSIC_KEY_ID", "KEY789")
     monkeypatch.setenv("APPLE_MUSIC_PRIVATE_KEY", "/path/to/AuthKey.p8")
     monkeypatch.setenv("APPLE_MUSIC_USER_TOKEN", "user-token-abc")
+    monkeypatch.setenv("APPLE_MUSIC_PUBLIC_PLAYLIST_IDS", "pl.123 pl.456")
+    monkeypatch.setenv("APPLE_MUSIC_STOREFRONT", "us")
+    monkeypatch.setenv("APPLE_MUSIC_DEVELOPER_TOKEN_TTL_SECONDS", "3600")
+    monkeypatch.setenv("APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS", "15")
+    monkeypatch.setenv("APPLE_MUSIC_MAX_RETRIES", "5")
+    monkeypatch.setenv("APPLE_MUSIC_RETRY_BACKOFF_SECONDS", "2.5")
 
     settings = PlexistSettings()
     user_inputs = build_user_inputs(settings)
@@ -53,3 +59,9 @@ def test_settings_from_environment(monkeypatch):
     assert user_inputs.apple_music_key_id == "KEY789"
     assert user_inputs.apple_music_private_key == "/path/to/AuthKey.p8"
     assert user_inputs.apple_music_user_token == "user-token-abc"
+    assert user_inputs.apple_music_public_playlist_ids == "pl.123 pl.456"
+    assert user_inputs.apple_music_storefront == "us"
+    assert user_inputs.apple_music_developer_token_ttl_seconds == 3600
+    assert user_inputs.apple_music_request_timeout_seconds == 15
+    assert user_inputs.apple_music_max_retries == 5
+    assert user_inputs.apple_music_retry_backoff_seconds == 2.5

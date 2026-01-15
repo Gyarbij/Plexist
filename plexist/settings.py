@@ -71,6 +71,24 @@ class PlexistSettings(BaseSettings):
     apple_music_user_token: Optional[str] = Field(
         default=None, validation_alias="APPLE_MUSIC_USER_TOKEN"
     )
+    apple_music_public_playlist_ids: Optional[str] = Field(
+        default=None, validation_alias="APPLE_MUSIC_PUBLIC_PLAYLIST_IDS"
+    )
+    apple_music_storefront: Optional[str] = Field(
+        default=None, validation_alias="APPLE_MUSIC_STOREFRONT"
+    )
+    apple_music_developer_token_ttl_seconds: Optional[int] = Field(
+        default=43200, validation_alias="APPLE_MUSIC_DEVELOPER_TOKEN_TTL_SECONDS"
+    )
+    apple_music_request_timeout_seconds: Optional[int] = Field(
+        default=10, validation_alias="APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS"
+    )
+    apple_music_max_retries: Optional[int] = Field(
+        default=3, validation_alias="APPLE_MUSIC_MAX_RETRIES"
+    )
+    apple_music_retry_backoff_seconds: Optional[float] = Field(
+        default=1.0, validation_alias="APPLE_MUSIC_RETRY_BACKOFF_SECONDS"
+    )
 
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
@@ -95,4 +113,10 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         apple_music_key_id=settings.apple_music_key_id,
         apple_music_private_key=settings.apple_music_private_key,
         apple_music_user_token=settings.apple_music_user_token,
+        apple_music_public_playlist_ids=settings.apple_music_public_playlist_ids,
+        apple_music_storefront=settings.apple_music_storefront,
+        apple_music_developer_token_ttl_seconds=settings.apple_music_developer_token_ttl_seconds,
+        apple_music_request_timeout_seconds=settings.apple_music_request_timeout_seconds,
+        apple_music_max_retries=settings.apple_music_max_retries,
+        apple_music_retry_backoff_seconds=settings.apple_music_retry_backoff_seconds,
     )

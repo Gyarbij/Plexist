@@ -91,6 +91,12 @@ async def test_service_registry_sync_all_runs_only_configured(monkeypatch):
         apple_music_key_id=None,
         apple_music_private_key=None,
         apple_music_user_token=None,
+        apple_music_public_playlist_ids=None,
+        apple_music_storefront=None,
+        apple_music_developer_token_ttl_seconds=None,
+        apple_music_request_timeout_seconds=None,
+        apple_music_max_retries=None,
+        apple_music_retry_backoff_seconds=None,
     )
 
     await base.ServiceRegistry.sync_all(None, dummy_inputs)

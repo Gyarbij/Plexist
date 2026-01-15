@@ -84,11 +84,24 @@ APPLE_MUSIC_TEAM_ID=YOUR_TEAM_ID
 APPLE_MUSIC_KEY_ID=YOUR_KEY_ID
 APPLE_MUSIC_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nYOUR_KEY_CONTENT\n-----END PRIVATE KEY-----
 APPLE_MUSIC_USER_TOKEN=YOUR_MUSIC_USER_TOKEN
+APPLE_MUSIC_PUBLIC_PLAYLIST_IDS=pl.123 pl.456
+APPLE_MUSIC_STOREFRONT=us
+APPLE_MUSIC_DEVELOPER_TOKEN_TTL_SECONDS=43200
+APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS=10
+APPLE_MUSIC_MAX_RETRIES=3
+APPLE_MUSIC_RETRY_BACKOFF_SECONDS=1.0
 ```
 
 **Note:** The private key can be provided as:
 - The full key content (with `\n` for newlines)
 - A file path starting with `/` (e.g., `/app/data/AuthKey.p8`)
+
+**Public playlist mode (no Music User Token):**
+If you only want to sync public Apple Music playlists, you can omit `APPLE_MUSIC_USER_TOKEN` and set:
+- `APPLE_MUSIC_PUBLIC_PLAYLIST_IDS` (space-separated playlist IDs)
+- `APPLE_MUSIC_STOREFRONT` (e.g., `us`, `gb`)
+
+This mode still requires a Developer Token (Team ID, Key ID, Private Key).
 
 ## Installation
 
@@ -151,6 +164,12 @@ docker run -d \
   -e APPLE_MUSIC_KEY_ID=                # MusicKit Key ID
   -e APPLE_MUSIC_PRIVATE_KEY=           # MusicKit private key content or file path
   -e APPLE_MUSIC_USER_TOKEN=            # Music User Token for library access
+  -e APPLE_MUSIC_PUBLIC_PLAYLIST_IDS=   # Public playlist IDs (space-separated)
+  -e APPLE_MUSIC_STOREFRONT=us          # Catalog storefront (e.g., us, gb)
+  -e APPLE_MUSIC_DEVELOPER_TOKEN_TTL_SECONDS=43200  # Developer token TTL
+  -e APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS=10         # API request timeout
+  -e APPLE_MUSIC_MAX_RETRIES=3                      # API retry attempts
+  -e APPLE_MUSIC_RETRY_BACKOFF_SECONDS=1.0          # Retry backoff base seconds
   -v /path/to/data:/app/data            # Mount for missing tracks files and OAuth cache
   gyarbij/plexist:latest
 
@@ -206,6 +225,12 @@ services:
       - APPLE_MUSIC_KEY_ID=      # MusicKit Key ID  
       - APPLE_MUSIC_PRIVATE_KEY= # MusicKit private key content or /app/data/AuthKey.p8
       - APPLE_MUSIC_USER_TOKEN=  # Music User Token for library access
+      - APPLE_MUSIC_PUBLIC_PLAYLIST_IDS=  # Public playlist IDs (space-separated)
+      - APPLE_MUSIC_STOREFRONT=us         # Catalog storefront (e.g., us, gb)
+      - APPLE_MUSIC_DEVELOPER_TOKEN_TTL_SECONDS=43200  # Developer token TTL
+      - APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS=10         # API request timeout
+      - APPLE_MUSIC_MAX_RETRIES=3                      # API retry attempts
+      - APPLE_MUSIC_RETRY_BACKOFF_SECONDS=1.0          # Retry backoff base seconds
     volumes:
       - /path/to/data:/app/data  # For missing tracks, OAuth cache, and Apple Music key
     restart: unless-stopped

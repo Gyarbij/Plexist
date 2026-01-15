@@ -72,6 +72,12 @@ def mock_user_inputs():
         apple_music_key_id="KEY123",
         apple_music_private_key="-----BEGIN PRIVATE KEY-----\nMIGT...\n-----END PRIVATE KEY-----",
         apple_music_user_token="user-token-abc123",
+        apple_music_public_playlist_ids=None,
+        apple_music_storefront=None,
+        apple_music_developer_token_ttl_seconds=None,
+        apple_music_request_timeout_seconds=None,
+        apple_music_max_retries=None,
+        apple_music_retry_backoff_seconds=None,
     )
 
 
@@ -99,6 +105,12 @@ def mock_user_inputs_unconfigured():
         apple_music_key_id=None,
         apple_music_private_key=None,
         apple_music_user_token=None,
+        apple_music_public_playlist_ids=None,
+        apple_music_storefront=None,
+        apple_music_developer_token_ttl_seconds=None,
+        apple_music_request_timeout_seconds=None,
+        apple_music_max_retries=None,
+        apple_music_retry_backoff_seconds=None,
     )
 
 
@@ -421,6 +433,40 @@ class TestAppleMusicProvider:
         provider = AppleMusicProvider()
         assert provider.is_configured(mock_user_inputs_unconfigured) is False
 
+    def test_is_configured_with_public_playlist_ids(self):
+        """Test is_configured returns True when public playlist IDs are set."""
+        public_inputs = UserInputs(
+            plex_url="http://localhost:32400",
+            plex_token="test-token",
+            write_missing_as_csv=False,
+            write_missing_as_json=False,
+            add_playlist_poster=True,
+            add_playlist_description=True,
+            append_instead_of_sync=False,
+            wait_seconds=86400,
+            max_requests_per_second=5.0,
+            max_concurrent_requests=4,
+            sync_liked_tracks=False,
+            spotipy_client_id=None,
+            spotipy_client_secret=None,
+            spotify_user_id=None,
+            deezer_user_id=None,
+            deezer_playlist_ids=None,
+            apple_music_team_id="TEAM123",
+            apple_music_key_id="KEY456",
+            apple_music_private_key="-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+            apple_music_user_token=None,
+            apple_music_public_playlist_ids="pl.123 pl.456",
+            apple_music_storefront="us",
+            apple_music_developer_token_ttl_seconds=None,
+            apple_music_request_timeout_seconds=None,
+            apple_music_max_retries=None,
+            apple_music_retry_backoff_seconds=None,
+        )
+
+        provider = AppleMusicProvider()
+        assert provider.is_configured(public_inputs) is True
+
     def test_is_configured_returns_false_with_partial_config(self):
         """Test is_configured returns False with partial configuration."""
         partial_inputs = UserInputs(
@@ -444,6 +490,12 @@ class TestAppleMusicProvider:
             apple_music_key_id=None,  # Missing
             apple_music_private_key=None,  # Missing
             apple_music_user_token=None,  # Missing
+            apple_music_public_playlist_ids=None,
+            apple_music_storefront=None,
+            apple_music_developer_token_ttl_seconds=None,
+            apple_music_request_timeout_seconds=None,
+            apple_music_max_retries=None,
+            apple_music_retry_backoff_seconds=None,
         )
         
         provider = AppleMusicProvider()
@@ -567,13 +619,90 @@ class TestAppleMusicProvider:
                                     "_generate_developer_token",
                                     return_value="mock-token",
                                 ):
-                                    await provider.sync(mock_plex, mock_user_inputs)
+                                    with patch.object(
+                                        AppleMusicClient,
+                                        "get_user_storefront",
+                                        new_callable=AsyncMock,
+                                        return_value="us",
+                                    ):
+                                        await provider.sync(mock_plex, mock_user_inputs)
         
         # Verify playlist sync was called
         mock_update.assert_called_once()
         
         # Verify liked tracks sync was called (since sync_liked_tracks=True)
         mock_sync_liked.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_sync_public_playlists_without_user_token(self):
+        """Test syncing public playlists without a user token."""
+        provider = AppleMusicProvider()
+        mock_plex = MagicMock()
+        public_inputs = UserInputs(
+            plex_url="http://localhost:32400",
+            plex_token="test-token",
+            write_missing_as_csv=False,
+            write_missing_as_json=False,
+            add_playlist_poster=True,
+            add_playlist_description=True,
+            append_instead_of_sync=False,
+            wait_seconds=86400,
+            max_requests_per_second=5.0,
+            max_concurrent_requests=4,
+            sync_liked_tracks=False,
+            spotipy_client_id=None,
+            spotipy_client_secret=None,
+            spotify_user_id=None,
+            deezer_user_id=None,
+            deezer_playlist_ids=None,
+            apple_music_team_id="TEAM123",
+            apple_music_key_id="KEY456",
+            apple_music_private_key="-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----",
+            apple_music_user_token=None,
+            apple_music_public_playlist_ids="pl.123",
+            apple_music_storefront="us",
+            apple_music_developer_token_ttl_seconds=None,
+            apple_music_request_timeout_seconds=None,
+            apple_music_max_retries=None,
+            apple_music_retry_backoff_seconds=None,
+        )
+
+        test_playlist = Playlist(
+            id="pl.123",
+            name="Public Playlist",
+            description="",
+            poster="",
+        )
+
+        with patch(
+            "modules.apple_music._get_am_public_playlist",
+            new_callable=AsyncMock,
+        ) as mock_public_playlist:
+            mock_public_playlist.return_value = test_playlist
+
+            with patch(
+                "modules.apple_music._get_am_public_tracks_from_playlist",
+                new_callable=AsyncMock,
+            ) as mock_public_tracks:
+                mock_public_tracks.return_value = [
+                    Track(
+                        title="Test Song",
+                        artist="Test Artist",
+                        album="Test Album",
+                        url="https://example.com",
+                        year="2023",
+                        genre="Pop",
+                    )
+                ]
+
+                with patch(
+                    "modules.apple_music.update_or_create_plex_playlist",
+                    new_callable=AsyncMock,
+                ) as mock_update:
+                    with patch.object(AppleMusicClient, "close", new_callable=AsyncMock):
+                        await provider.sync(mock_plex, public_inputs)
+
+        mock_update.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_sync_handles_auth_error(self, mock_user_inputs):
@@ -593,8 +722,14 @@ class TestAppleMusicProvider:
                     "_generate_developer_token",
                     return_value="mock-token",
                 ):
-                    # Should not raise, just log error
-                    await provider.sync(mock_plex, mock_user_inputs)
+                    with patch.object(
+                        AppleMusicClient,
+                        "get_user_storefront",
+                        new_callable=AsyncMock,
+                        return_value="us",
+                    ):
+                        # Should not raise, just log error
+                        await provider.sync(mock_plex, mock_user_inputs)
 
 
 class TestAppleMusicProviderPrivateKeyHandling:
@@ -629,6 +764,12 @@ class TestAppleMusicProviderPrivateKeyHandling:
             apple_music_key_id="KEY456",
             apple_music_private_key=str(key_file),
             apple_music_user_token="user-token",
+            apple_music_public_playlist_ids=None,
+            apple_music_storefront=None,
+            apple_music_developer_token_ttl_seconds=None,
+            apple_music_request_timeout_seconds=None,
+            apple_music_max_retries=None,
+            apple_music_retry_backoff_seconds=None,
         )
         
         provider = AppleMusicProvider()
@@ -668,6 +809,12 @@ class TestAppleMusicProviderPrivateKeyHandling:
             apple_music_key_id="KEY456",
             apple_music_private_key="/nonexistent/path/AuthKey.p8",
             apple_music_user_token="user-token",
+            apple_music_public_playlist_ids=None,
+            apple_music_storefront=None,
+            apple_music_developer_token_ttl_seconds=None,
+            apple_music_request_timeout_seconds=None,
+            apple_music_max_retries=None,
+            apple_music_retry_backoff_seconds=None,
         )
         
         provider = AppleMusicProvider()

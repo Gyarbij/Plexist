@@ -11,6 +11,7 @@ Requirements:
 - Developer Token (generated from team_id, key_id, and private key)
 - Music User Token (obtained via MusicKit JS or native app authorization)
 """
+import asyncio
 import logging
 import time
 from typing import List, Optional
@@ -37,11 +38,19 @@ class AppleMusicClient:
         key_id: str,
         private_key: str,
         user_token: Optional[str] = None,
+        developer_token_ttl_seconds: int = 43200,
+        request_timeout_seconds: int = 10,
+        max_retries: int = 3,
+        retry_backoff_seconds: float = 1.0,
     ):
         self.team_id = team_id
         self.key_id = key_id
         self.private_key = private_key
         self.user_token = user_token
+        self.developer_token_ttl_seconds = developer_token_ttl_seconds
+        self.request_timeout_seconds = request_timeout_seconds
+        self.max_retries = max_retries
+        self.retry_backoff_seconds = retry_backoff_seconds
         self._developer_token: Optional[str] = None
         self._token_expiry: float = 0
         self._session: Optional[aiohttp.ClientSession] = None
@@ -49,10 +58,10 @@ class AppleMusicClient:
     def _generate_developer_token(self) -> str:
         """Generate a developer token (JWT) for Apple Music API.
         
-        The token is valid for up to 6 months (we use 12 hours for security).
+        The token is valid for up to 6 months.
         """
         now = int(time.time())
-        expiry = now + (12 * 60 * 60)  # 12 hours
+        expiry = now + self.developer_token_ttl_seconds
         
         headers = {
             "alg": "ES256",
@@ -85,7 +94,8 @@ class AppleMusicClient:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=self.request_timeout_seconds)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
     
     async def close(self) -> None:
@@ -114,24 +124,41 @@ class AppleMusicClient:
         session = await self._get_session()
         url = f"{APPLE_MUSIC_API_BASE}{endpoint}"
         headers = self._get_headers(include_user_token)
-        
-        try:
-            async with session.request(method, url, headers=headers, params=params) as response:
-                if response.status == 401:
-                    raise AppleMusicAuthError("Invalid developer token or unauthorized")
-                elif response.status == 403:
-                    raise AppleMusicAuthError(
-                        "Invalid or missing Music User Token. "
-                        "Ensure APPLE_MUSIC_USER_TOKEN is set correctly."
-                    )
-                elif response.status != 200:
-                    text = await response.text()
-                    raise AppleMusicAPIError(
-                        f"API request failed with status {response.status}: {text}"
-                    )
-                return await response.json()
-        except aiohttp.ClientError as e:
-            raise AppleMusicAPIError(f"Network error: {e}")
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                async with session.request(
+                    method, url, headers=headers, params=params
+                ) as response:
+                    if response.status == 401:
+                        raise AppleMusicAuthError("Invalid developer token or unauthorized")
+                    if response.status == 403:
+                        raise AppleMusicAuthError(
+                            "Invalid or missing Music User Token. "
+                            "Ensure APPLE_MUSIC_USER_TOKEN is set correctly."
+                        )
+                    if response.status == 429 or response.status >= 500:
+                        if attempt < self.max_retries:
+                            retry_after = response.headers.get("Retry-After")
+                            delay = (
+                                float(retry_after)
+                                if retry_after
+                                else self.retry_backoff_seconds * (2 ** attempt)
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                    if response.status != 200:
+                        text = await response.text()
+                        raise AppleMusicAPIError(
+                            f"API request failed with status {response.status}: {text}"
+                        )
+                    return await response.json()
+            except aiohttp.ClientError as e:
+                if attempt < self.max_retries:
+                    delay = self.retry_backoff_seconds * (2 ** attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                raise AppleMusicAPIError(f"Network error: {e}")
     
     async def get_library_playlists(self, limit: int = 100) -> List[dict]:
         """Fetch all user library playlists with pagination."""
@@ -206,6 +233,45 @@ class AppleMusicClient:
                 break
         
         return songs
+
+    async def get_catalog_playlist(self, storefront: str, playlist_id: str) -> Optional[dict]:
+        """Fetch a public catalog playlist by ID."""
+        response = await self._request(
+            "GET",
+            f"/catalog/{storefront}/playlists/{playlist_id}",
+            include_user_token=False,
+        )
+        data = response.get("data", [])
+        return data[0] if data else None
+
+    async def get_catalog_playlist_tracks(
+        self, storefront: str, playlist_id: str, limit: int = 100
+    ) -> List[dict]:
+        """Fetch tracks from a public catalog playlist by ID."""
+        tracks = []
+        offset = 0
+
+        while True:
+            params = {"limit": limit, "offset": offset}
+            response = await self._request(
+                "GET",
+                f"/catalog/{storefront}/playlists/{playlist_id}/tracks",
+                include_user_token=False,
+                params=params,
+            )
+
+            data = response.get("data", [])
+            if not data:
+                break
+
+            tracks.extend(data)
+
+            if response.get("next"):
+                offset += limit
+            else:
+                break
+
+        return tracks
     
     async def get_user_storefront(self) -> str:
         """Get the user's storefront (country/region code)."""
@@ -285,6 +351,12 @@ def _extract_playlist_metadata(playlist_data: dict) -> Playlist:
     )
 
 
+def _parse_public_playlist_ids(raw_ids: Optional[str]) -> List[str]:
+    if not raw_ids:
+        return []
+    return [item.strip() for item in raw_ids.split() if item.strip()]
+
+
 async def _get_am_playlists(client: AppleMusicClient) -> List[Playlist]:
     """Fetch all user playlists from Apple Music."""
     playlists = []
@@ -350,6 +422,54 @@ async def _get_am_library_songs(client: AppleMusicClient) -> List[Track]:
     return tracks
 
 
+async def _get_am_public_playlist(
+    client: AppleMusicClient,
+    storefront: str,
+    playlist_id: str,
+) -> Optional[Playlist]:
+    """Fetch a public Apple Music playlist from the catalog."""
+    try:
+        raw_playlist = await client.get_catalog_playlist(storefront, playlist_id)
+        if not raw_playlist:
+            logging.warning("No public Apple Music playlist found for id=%s", playlist_id)
+            return None
+        return _extract_playlist_metadata(raw_playlist)
+    except AppleMusicAPIError as e:
+        logging.error("Error fetching public playlist %s: %s", playlist_id, e)
+    except Exception as e:
+        logging.error("Error fetching Apple Music public playlist: %s", e)
+    return None
+
+
+async def _get_am_public_tracks_from_playlist(
+    client: AppleMusicClient,
+    storefront: str,
+    playlist: Playlist,
+) -> List[Track]:
+    """Fetch tracks from a public Apple Music playlist."""
+    tracks: List[Track] = []
+
+    try:
+        raw_tracks = await client.get_catalog_playlist_tracks(storefront, playlist.id)
+        for track_data in raw_tracks:
+            tracks.append(_extract_track_metadata(track_data))
+        logging.info(
+            "Fetched %d tracks from Apple Music public playlist '%s'",
+            len(tracks),
+            playlist.name,
+        )
+    except AppleMusicAPIError as e:
+        logging.error(
+            "Error fetching tracks from public playlist %s: %s",
+            playlist.name,
+            e,
+        )
+    except Exception as e:
+        logging.error("Error fetching Apple Music public playlist tracks: %s", e)
+
+    return tracks
+
+
 @ServiceRegistry.register
 class AppleMusicProvider(MusicServiceProvider):
     """Apple Music provider for Plexist."""
@@ -358,11 +478,14 @@ class AppleMusicProvider(MusicServiceProvider):
     
     def is_configured(self, user_inputs: UserInputs) -> bool:
         """Check if Apple Music is properly configured."""
+        public_ids = _parse_public_playlist_ids(
+            user_inputs.apple_music_public_playlist_ids
+        )
         return bool(
             user_inputs.apple_music_team_id
             and user_inputs.apple_music_key_id
             and user_inputs.apple_music_private_key
-            and user_inputs.apple_music_user_token
+            and (user_inputs.apple_music_user_token or public_ids)
         )
     
     def _get_client(self, user_inputs: UserInputs) -> AppleMusicClient:
@@ -383,6 +506,16 @@ class AppleMusicProvider(MusicServiceProvider):
             key_id=user_inputs.apple_music_key_id or "",
             private_key=private_key,
             user_token=user_inputs.apple_music_user_token,
+            developer_token_ttl_seconds=(
+                user_inputs.apple_music_developer_token_ttl_seconds or 43200
+            ),
+            request_timeout_seconds=(
+                user_inputs.apple_music_request_timeout_seconds or 10
+            ),
+            max_retries=(user_inputs.apple_music_max_retries or 3),
+            retry_backoff_seconds=(
+                user_inputs.apple_music_retry_backoff_seconds or 1.0
+            ),
         )
     
     async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
@@ -420,23 +553,52 @@ class AppleMusicProvider(MusicServiceProvider):
     async def sync(self, plex: PlexServer, user_inputs: UserInputs) -> None:
         """Sync Apple Music playlists and liked tracks to Plex."""
         client = self._get_client(user_inputs)
-        
+
+        public_ids = _parse_public_playlist_ids(
+            user_inputs.apple_music_public_playlist_ids
+        )
+        has_user_token = bool(user_inputs.apple_music_user_token)
+        storefront = user_inputs.apple_music_storefront
+        if not storefront:
+            storefront = await client.get_user_storefront() if has_user_token else "us"
+
         try:
-            # Sync playlists
-            playlists = await _get_am_playlists(client)
-            if playlists:
-                for playlist in playlists:
-                    logging.info("Syncing Apple Music playlist: %s", playlist.name)
-                    tracks = await _get_am_tracks_from_playlist(client, playlist)
-                    if tracks:
-                        await update_or_create_plex_playlist(
-                            plex, playlist, tracks, user_inputs
+            # Sync public playlists (catalog)
+            if public_ids:
+                for playlist_id in public_ids:
+                    playlist = await _get_am_public_playlist(
+                        client, storefront, playlist_id
+                    )
+                    if playlist:
+                        logging.info("Syncing Apple Music public playlist: %s", playlist.name)
+                        tracks = await _get_am_public_tracks_from_playlist(
+                            client, storefront, playlist
                         )
-            else:
-                logging.warning("No Apple Music playlists found for the user")
+                        if tracks:
+                            await update_or_create_plex_playlist(
+                                plex, playlist, tracks, user_inputs
+                            )
+
+            # Sync library playlists (requires user token)
+            if has_user_token:
+                playlists = await _get_am_playlists(client)
+                if playlists:
+                    for playlist in playlists:
+                        logging.info("Syncing Apple Music playlist: %s", playlist.name)
+                        tracks = await _get_am_tracks_from_playlist(client, playlist)
+                        if tracks:
+                            await update_or_create_plex_playlist(
+                                plex, playlist, tracks, user_inputs
+                            )
+                else:
+                    logging.warning("No Apple Music playlists found for the user")
+            elif not public_ids:
+                logging.warning(
+                    "Apple Music is configured but no user token or public playlist IDs were provided"
+                )
             
             # Sync library songs (liked tracks) if enabled
-            if user_inputs.sync_liked_tracks:
+            if user_inputs.sync_liked_tracks and has_user_token:
                 logging.info("Syncing Apple Music library songs to Plex ratings")
                 library_songs = await _get_am_library_songs(client)
                 if library_songs:
@@ -447,6 +609,10 @@ class AppleMusicProvider(MusicServiceProvider):
                     logging.warning(
                         "No library songs found or unable to fetch from Apple Music"
                     )
+            elif user_inputs.sync_liked_tracks and not has_user_token:
+                logging.warning(
+                    "Liked tracks sync requires APPLE_MUSIC_USER_TOKEN"
+                )
         
         except AppleMusicAuthError as e:
             logging.error("Apple Music authentication failed: %s", e)

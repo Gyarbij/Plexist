@@ -11,6 +11,7 @@ from typing import Dict, List
 
 import aiosqlite
 import plexapi
+from aiolimiter import AsyncLimiter
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -20,40 +21,30 @@ from .helperClasses import Playlist, Track, UserInputs
 
 DB_PATH = os.getenv("DB_PATH", "plexist.db")
 
-# Rate limiter class for controlling request frequency
-class AsyncRateLimiter:
-    """Token bucket rate limiter for controlling request frequency to Plex."""
-
-    def __init__(self, max_requests_per_second: float = 5.0):
-        self.max_requests_per_second = max_requests_per_second
-        self.min_interval = 1.0 / max_requests_per_second if max_requests_per_second > 0 else 0
-        self._last_request_time = 0.0
-        self._lock = asyncio.Lock()
-
-    async def acquire(self) -> None:
-        """Wait until a request can be made within rate limits."""
-        async with self._lock:
-            now = time.monotonic()
-            time_since_last = now - self._last_request_time
-            if time_since_last < self.min_interval:
-                await asyncio.sleep(self.min_interval - time_since_last)
-            self._last_request_time = time.monotonic()
-
-    async def update_rate(self, max_requests_per_second: float) -> None:
-        """Update the rate limit."""
-        async with self._lock:
-            self.max_requests_per_second = max_requests_per_second
-            self.min_interval = 1.0 / max_requests_per_second if max_requests_per_second > 0 else 0
-
-# Global rate limiter instance
-plex_rate_limiter = AsyncRateLimiter()
+# Global rate limiter instance (aiolimiter)
+plex_rate_limiter = AsyncLimiter(5, 1)
 max_concurrent_workers = 4  # Default, will be updated from UserInputs
 
 # Global cache for Plex tracks
 plex_tracks_cache: Dict[str, plexapi.audio.Track] = {}
+plex_tracks_cache_index: Dict[str, plexapi.audio.Track] = {}
 cache_lock = asyncio.Lock()
 cache_building = False
 cache_building_lock = asyncio.Lock()
+
+
+async def _acquire_rate_limit() -> None:
+    async with plex_rate_limiter:
+        return
+
+
+def _rebuild_cache_index() -> None:
+    """Build a normalized key index to prune search space (lowercase title|artist|album)."""
+    global plex_tracks_cache_index
+    plex_tracks_cache_index = {}
+    for track in plex_tracks_cache.values():
+        key = f"{track.title.lower()}|{track.artist().title.lower()}|{track.album().title.lower()}"
+        plex_tracks_cache_index[key] = track
 
 async def initialize_db() -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -88,7 +79,7 @@ async def initialize_db() -> None:
 async def fetch_plex_tracks(
     plex: PlexServer, offset: int = 0, limit: int = 100
 ) -> List[plexapi.audio.Track]:
-    await plex_rate_limiter.acquire()
+    await _acquire_rate_limit()
     return await asyncio.to_thread(
         plex.library.search, libtype="track", container_start=offset, container_size=limit
     )
@@ -115,6 +106,7 @@ async def fetch_and_cache_tracks(plex: PlexServer) -> None:
                         key = f"{track.title}|{track.artist().title}|{track.album().title}"
                         plex_tracks_cache[key] = track
                         new_items[key] = track
+                    _rebuild_cache_index()
                 offset += limit
                 await _update_db_cache_bulk(new_items)
                 logging.info(
@@ -178,6 +170,7 @@ async def load_cache_from_db() -> None:
             )
             for row in rows
         }
+        _rebuild_cache_index()
 
     logging.info("Loaded %s tracks from the database cache", len(plex_tracks_cache))
 
@@ -205,35 +198,49 @@ async def _match_single_track(plex: PlexServer, track: Track):
 
         # First, search in the cache
         async with cache_lock:
-            for key, s in plex_tracks_cache.items():
-                score = 0
-                score += similarity(s.title, track.title) * 0.4
-                score += similarity(s.artist().title, track.artist) * 0.3
-                score += similarity(s.album().title, track.album) * 0.2
+            candidates = []
+            artist_lower = track.artist.lower()
+            title_lower = track.title.lower()
+            album_lower = track.album.lower()
+            for s in plex_tracks_cache.values():
+                if (
+                    s.artist().title.lower() == artist_lower
+                    or s.title.lower() == title_lower
+                    or s.album().title.lower() == album_lower
+                ):
+                    candidates.append(s)
+            if not candidates:
+                candidates = list(plex_tracks_cache.values())[:500]
 
-                if "(" in track.title and "(" in s.title:
-                    version_similarity = similarity(
-                        track.title.split("(")[1].split(")")[0],
-                        s.title.split("(")[1].split(")")[0],
-                    )
-                    score += version_similarity * 0.1
+        for s in candidates:
+            score = 0
+            score += similarity(s.title, track.title) * 0.4
+            score += similarity(s.artist().title, track.artist) * 0.3
+            score += similarity(s.album().title, track.album) * 0.2
 
-                if track.year and s.year:
-                    score += (int(track.year) == s.year) * 0.1
-                if track.genre and s.genres:
-                    genre_matches = any(
-                        similarity(g.tag, track.genre) > 0.8 for g in s.genres
-                    )
-                    score += genre_matches * 0.1
+            if "(" in track.title and "(" in s.title:
+                version_similarity = similarity(
+                    track.title.split("(")[1].split(")")[0],
+                    s.title.split("(")[1].split(")")[0],
+                )
+                score += version_similarity * 0.1
 
-                if score > best_score:
-                    best_score = score
-                    best_match = s
+            if track.year and s.year:
+                score += (int(track.year) == s.year) * 0.1
+            if track.genre and s.genres:
+                genre_matches = any(
+                    similarity(g.tag, track.genre) > 0.8 for g in s.genres
+                )
+                score += genre_matches * 0.1
+
+            if score > best_score:
+                best_score = score
+                best_match = s
 
         # If no good match in cache, search Plex directly
         if best_score < threshold:
             try:
-                await plex_rate_limiter.acquire()
+                await _acquire_rate_limit()
                 search = await asyncio.to_thread(
                     plex.search, query, mediatype="track", limit=20
                 )
@@ -267,15 +274,15 @@ async def _match_single_track(plex: PlexServer, track: Track):
         return (best_match, best_score) if best_score >= threshold else (None, 0)
 
     # Stage 1: Exact match from cache
-    key = f"{track.title}|{track.artist}|{track.album}"
+    key = f"{track.title.lower()}|{track.artist.lower()}|{track.album.lower()}"
     async with cache_lock:
-        if key in plex_tracks_cache:
+        if key in plex_tracks_cache_index:
             logging.info(
                 "Exact match found in cache for '%s' by '%s'",
                 track.title,
                 track.artist,
             )
-            return plex_tracks_cache[key], None
+            return plex_tracks_cache_index[key], None
 
     # Stage 2: Strict matching
     query = f"{track.title} {track.artist} {track.album}"
@@ -338,7 +345,8 @@ async def initialize_cache(plex: PlexServer) -> None:
 async def configure_rate_limiting(user_inputs: UserInputs) -> None:
     """Configure rate limiting based on user settings."""
     global max_concurrent_workers
-    await plex_rate_limiter.update_rate(user_inputs.max_requests_per_second)
+    global plex_rate_limiter
+    plex_rate_limiter = AsyncLimiter(user_inputs.max_requests_per_second, 1)
     max_concurrent_workers = user_inputs.max_concurrent_requests
     logging.info(
         f"Rate limiting configured: {user_inputs.max_requests_per_second} req/s, "

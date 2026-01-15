@@ -128,7 +128,6 @@ class TestQobuzIntegration(unittest.TestCase):
         """Test extracting tracks from a Qobuz playlist."""
         mock_client = Mock()
         mock_playlist_obj = Mock()
-        
         mock_track = Mock()
         mock_track.title = "Track 1"
         mock_track.id = 111

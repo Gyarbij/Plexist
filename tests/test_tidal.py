@@ -105,7 +105,6 @@ class TestTidalIntegration(unittest.TestCase):
         """Test extracting tracks from a Tidal playlist."""
         mock_session = Mock()
         mock_playlist_obj = Mock()
-        
         mock_track = Mock()
         mock_track.name = "Track 1"
         mock_track.id = "t1"

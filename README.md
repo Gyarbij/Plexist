@@ -213,7 +213,9 @@ LOG_FORMAT=plain
 
 ## 🐳 Docker Deployment
 
-Multi-platform images available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/).
+Multi-platform images available on:
+- **Docker Hub:** [`gyarbij/plexist`](https://hub.docker.com/r/gyarbij/plexist/)
+- **GitHub Container Registry:** [`ghcr.io/gyarbij/plexist`](https://ghcr.io/gyarbij/plexist)
 
 ### Boolean Values
 
@@ -286,9 +288,8 @@ docker run -d \
   -e SPOTIFY_USER_ID=your-user-id \
   -v /path/to/data:/app/data \
   gyarbij/plexist:latest
+  # Or use: ghcr.io/gyarbij/plexist:latest
 ```
-
-<details>
 <summary><strong>Full Docker Run with All Services</strong></summary>
 
 ```bash
@@ -351,7 +352,7 @@ Create a `compose.yaml` file:
 ```yaml
 services:
   plexist:
-    image: gyarbij/plexist:latest
+    image: gyarbij/plexist:latest  # Or: ghcr.io/gyarbij/plexist:latest
     container_name: plexist
     restart: unless-stopped
     environment:

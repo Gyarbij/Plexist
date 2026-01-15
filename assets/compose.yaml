@@ -1,9 +1,13 @@
 # Plexist Docker Compose Configuration
 # See README.md for full documentation
+#
+# Images available from:
+#   - Docker Hub: gyarbij/plexist
+#   - GitHub Container Registry: ghcr.io/gyarbij/plexist
 
 services:
   plexist:
-    image: gyarbij/plexist:latest
+    image: gyarbij/plexist:latest  # Or: ghcr.io/gyarbij/plexist:latest
     container_name: plexist
     restart: unless-stopped
 

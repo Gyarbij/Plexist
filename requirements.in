@@ -1,6 +1,7 @@
 spotipy
 plexapi
 deezer-python
+tidalapi
 urllib3
 tenacity
 zipp

@@ -90,6 +90,58 @@ class PlexistSettings(BaseSettings):
         default=1.0, validation_alias="APPLE_MUSIC_RETRY_BACKOFF_SECONDS"
     )
 
+    # Tidal settings
+    tidal_access_token: Optional[str] = Field(
+        default=None, validation_alias="TIDAL_ACCESS_TOKEN"
+    )
+    tidal_refresh_token: Optional[str] = Field(
+        default=None, validation_alias="TIDAL_REFRESH_TOKEN"
+    )
+    tidal_token_expiry: Optional[str] = Field(
+        default=None, validation_alias="TIDAL_TOKEN_EXPIRY"
+    )
+    tidal_public_playlist_ids: Optional[str] = Field(
+        default=None, validation_alias="TIDAL_PUBLIC_PLAYLIST_IDS"
+    )
+    tidal_request_timeout_seconds: Optional[int] = Field(
+        default=10, validation_alias="TIDAL_REQUEST_TIMEOUT_SECONDS"
+    )
+    tidal_max_retries: Optional[int] = Field(
+        default=3, validation_alias="TIDAL_MAX_RETRIES"
+    )
+    tidal_retry_backoff_seconds: Optional[float] = Field(
+        default=1.0, validation_alias="TIDAL_RETRY_BACKOFF_SECONDS"
+    )
+
+    # Qobuz settings
+    qobuz_app_id: Optional[str] = Field(
+        default=None, validation_alias="QOBUZ_APP_ID"
+    )
+    qobuz_app_secret: Optional[str] = Field(
+        default=None, validation_alias="QOBUZ_APP_SECRET"
+    )
+    qobuz_username: Optional[str] = Field(
+        default=None, validation_alias="QOBUZ_USERNAME"
+    )
+    qobuz_password: Optional[str] = Field(
+        default=None, validation_alias="QOBUZ_PASSWORD"
+    )
+    qobuz_user_auth_token: Optional[str] = Field(
+        default=None, validation_alias="QOBUZ_USER_AUTH_TOKEN"
+    )
+    qobuz_public_playlist_ids: Optional[str] = Field(
+        default=None, validation_alias="QOBUZ_PUBLIC_PLAYLIST_IDS"
+    )
+    qobuz_request_timeout_seconds: Optional[int] = Field(
+        default=10, validation_alias="QOBUZ_REQUEST_TIMEOUT_SECONDS"
+    )
+    qobuz_max_retries: Optional[int] = Field(
+        default=3, validation_alias="QOBUZ_MAX_RETRIES"
+    )
+    qobuz_retry_backoff_seconds: Optional[float] = Field(
+        default=1.0, validation_alias="QOBUZ_RETRY_BACKOFF_SECONDS"
+    )
+
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
     return UserInputs(
@@ -119,4 +171,22 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         apple_music_request_timeout_seconds=settings.apple_music_request_timeout_seconds,
         apple_music_max_retries=settings.apple_music_max_retries,
         apple_music_retry_backoff_seconds=settings.apple_music_retry_backoff_seconds,
+        # Tidal
+        tidal_access_token=settings.tidal_access_token,
+        tidal_refresh_token=settings.tidal_refresh_token,
+        tidal_token_expiry=settings.tidal_token_expiry,
+        tidal_public_playlist_ids=settings.tidal_public_playlist_ids,
+        tidal_request_timeout_seconds=settings.tidal_request_timeout_seconds,
+        tidal_max_retries=settings.tidal_max_retries,
+        tidal_retry_backoff_seconds=settings.tidal_retry_backoff_seconds,
+        # Qobuz
+        qobuz_app_id=settings.qobuz_app_id,
+        qobuz_app_secret=settings.qobuz_app_secret,
+        qobuz_username=settings.qobuz_username,
+        qobuz_password=settings.qobuz_password,
+        qobuz_user_auth_token=settings.qobuz_user_auth_token,
+        qobuz_public_playlist_ids=settings.qobuz_public_playlist_ids,
+        qobuz_request_timeout_seconds=settings.qobuz_request_timeout_seconds,
+        qobuz_max_retries=settings.qobuz_max_retries,
+        qobuz_retry_backoff_seconds=settings.qobuz_retry_backoff_seconds,
     )

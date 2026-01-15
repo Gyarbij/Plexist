@@ -103,6 +103,81 @@ If you only want to sync public Apple Music playlists, you can omit `APPLE_MUSIC
 
 This mode still requires a Developer Token (Team ID, Key ID, Private Key).
 
+### Tidal
+Tidal integration uses OAuth authentication for accessing your personal playlists and favorites.
+
+#### Getting Your OAuth Tokens
+Tidal uses OAuth device flow for authentication. You'll need to obtain tokens using `tidalapi`:
+
+**Option 1: Using the tidalapi library**
+```python
+import tidalapi
+
+session = tidalapi.Session()
+# This will print a URL to visit and authorize
+session.login_oauth_simple()
+
+# After authorization, save these values:
+print(f"Access Token: {session.access_token}")
+print(f"Refresh Token: {session.refresh_token}")
+print(f"Token Expiry: {session.expiry_time.isoformat()}")
+```
+
+**Option 2: Use existing Tidal tools**
+Tools like [tidal-dl](https://github.com/yaronzz/Tidal-Media-Downloader) can help you obtain OAuth tokens.
+
+#### Environment Variables
+```
+TIDAL_ACCESS_TOKEN=your_access_token
+TIDAL_REFRESH_TOKEN=your_refresh_token
+TIDAL_TOKEN_EXPIRY=2025-12-31T23:59:59
+TIDAL_PUBLIC_PLAYLIST_IDS=uuid-1 uuid-2
+TIDAL_REQUEST_TIMEOUT_SECONDS=10
+TIDAL_MAX_RETRIES=3
+TIDAL_RETRY_BACKOFF_SECONDS=1.0
+```
+
+**Public playlist mode (no OAuth tokens):**
+If you only want to sync public Tidal playlists, you can omit the OAuth tokens and set:
+- `TIDAL_PUBLIC_PLAYLIST_IDS` (space-separated playlist UUIDs)
+
+Find playlist UUIDs from the Tidal web URL: `https://tidal.com/browse/playlist/{uuid}`
+
+### Qobuz
+Qobuz integration requires app credentials and user authentication.
+
+#### Getting Your Credentials
+Qobuz doesn't have a public API. The app credentials must be obtained from the Qobuz desktop/mobile app or community tools.
+
+**App Credentials:**
+Tools like [qobuz-dl](https://github.com/vitiko98/qobuz-dl) can help you extract app credentials.
+
+**User Authentication:**
+You can authenticate using:
+1. Username (email) + Password
+2. User Auth Token (if you already have one)
+
+#### Environment Variables
+```
+QOBUZ_APP_ID=your_app_id
+QOBUZ_APP_SECRET=your_app_secret
+QOBUZ_USERNAME=your_email@example.com
+QOBUZ_PASSWORD=your_password
+QOBUZ_USER_AUTH_TOKEN=optional_existing_token
+QOBUZ_PUBLIC_PLAYLIST_IDS=123456 789012
+QOBUZ_REQUEST_TIMEOUT_SECONDS=10
+QOBUZ_MAX_RETRIES=3
+QOBUZ_RETRY_BACKOFF_SECONDS=1.0
+```
+
+**Note:** If `QOBUZ_USER_AUTH_TOKEN` is provided, it will be used instead of username/password authentication.
+
+**Public playlist mode (limited):**
+If you only want to sync public Qobuz playlists, you can omit user credentials and set:
+- `QOBUZ_PUBLIC_PLAYLIST_IDS` (space-separated playlist IDs)
+
+Find playlist IDs from the Qobuz web URL: `https://www.qobuz.com/playlist/{id}`
+
 ## Installation
 
 The below will only run once unless you create a cronjob, etc. Docker is the recommended deployment method.
@@ -170,6 +245,22 @@ docker run -d \
   -e APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS=10         # API request timeout
   -e APPLE_MUSIC_MAX_RETRIES=3                      # API retry attempts
   -e APPLE_MUSIC_RETRY_BACKOFF_SECONDS=1.0          # Retry backoff base seconds
+  -e TIDAL_ACCESS_TOKEN=                # Tidal OAuth access token
+  -e TIDAL_REFRESH_TOKEN=               # Tidal OAuth refresh token
+  -e TIDAL_TOKEN_EXPIRY=                # Token expiry datetime (ISO format)
+  -e TIDAL_PUBLIC_PLAYLIST_IDS=         # Public playlist UUIDs (space-separated)
+  -e TIDAL_REQUEST_TIMEOUT_SECONDS=10   # API request timeout
+  -e TIDAL_MAX_RETRIES=3                # API retry attempts
+  -e TIDAL_RETRY_BACKOFF_SECONDS=1.0    # Retry backoff base seconds
+  -e QOBUZ_APP_ID=                      # Qobuz app ID
+  -e QOBUZ_APP_SECRET=                  # Qobuz app secret
+  -e QOBUZ_USERNAME=                    # Qobuz username/email
+  -e QOBUZ_PASSWORD=                    # Qobuz password
+  -e QOBUZ_USER_AUTH_TOKEN=             # Qobuz user auth token (optional)
+  -e QOBUZ_PUBLIC_PLAYLIST_IDS=         # Public playlist IDs (space-separated)
+  -e QOBUZ_REQUEST_TIMEOUT_SECONDS=10   # API request timeout
+  -e QOBUZ_MAX_RETRIES=3                # API retry attempts
+  -e QOBUZ_RETRY_BACKOFF_SECONDS=1.0    # Retry backoff base seconds
   -v /path/to/data:/app/data            # Mount for missing tracks files and OAuth cache
   gyarbij/plexist:latest
 
@@ -231,6 +322,22 @@ services:
       - APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS=10         # API request timeout
       - APPLE_MUSIC_MAX_RETRIES=3                      # API retry attempts
       - APPLE_MUSIC_RETRY_BACKOFF_SECONDS=1.0          # Retry backoff base seconds
+      - TIDAL_ACCESS_TOKEN=      # Tidal OAuth access token
+      - TIDAL_REFRESH_TOKEN=     # Tidal OAuth refresh token
+      - TIDAL_TOKEN_EXPIRY=      # Token expiry (ISO format)
+      - TIDAL_PUBLIC_PLAYLIST_IDS=   # Public playlist UUIDs (space-separated)
+      - TIDAL_REQUEST_TIMEOUT_SECONDS=10   # API request timeout
+      - TIDAL_MAX_RETRIES=3                # API retry attempts
+      - TIDAL_RETRY_BACKOFF_SECONDS=1.0    # Retry backoff base seconds
+      - QOBUZ_APP_ID=            # Qobuz app ID
+      - QOBUZ_APP_SECRET=        # Qobuz app secret
+      - QOBUZ_USERNAME=          # Qobuz username/email
+      - QOBUZ_PASSWORD=          # Qobuz password
+      - QOBUZ_USER_AUTH_TOKEN=   # Qobuz user auth token (optional)
+      - QOBUZ_PUBLIC_PLAYLIST_IDS=   # Public playlist IDs (space-separated)
+      - QOBUZ_REQUEST_TIMEOUT_SECONDS=10   # API request timeout
+      - QOBUZ_MAX_RETRIES=3                # API retry attempts
+      - QOBUZ_RETRY_BACKOFF_SECONDS=1.0    # Retry backoff base seconds
     volumes:
       - /path/to/data:/app/data  # For missing tracks, OAuth cache, and Apple Music key
     restart: unless-stopped

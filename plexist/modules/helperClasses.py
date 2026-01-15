@@ -51,6 +51,7 @@ class UserInputs:
 
     deezer_user_id: Optional[str] = None
     deezer_playlist_ids: Optional[str] = None
+    deezer_access_token: Optional[str] = None  # OAuth token for write operations
 
     # Apple Music settings
     apple_music_team_id: Optional[str] = None

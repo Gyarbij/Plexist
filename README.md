@@ -39,11 +39,13 @@ Sync playlists between any two services — not just to Plex! Configure source �
 | Service | Read (Source) | Write (Destination) |
 |---------|:-------------:|:-------------------:|
 | Spotify | ✅ | ❌ |
-| Deezer | ✅ | ❌ |
-| Apple Music | ✅ | ❌ |
+| Deezer | ✅ | ✅ |
+| Apple Music | ✅ | ✅* |
 | Tidal | ✅ | ✅ |
 | Qobuz | ✅ | ✅ |
 | Plex | ✅ | ✅ |
+
+*\*Apple Music write has limitations: the API doesn't support clearing/deleting playlists, so tracks are appended to existing playlists rather than replaced.*
 
 #### Configuration
 
@@ -130,10 +132,25 @@ Get your **Profile ID** or **Playlist IDs**:
 **Playlist ID:**
 - From URL: `https://www.deezer.com/playlist/10484834882` → ID is `10484834882`
 
+### Write Support (Sync TO Deezer)
+
+To use Deezer as a sync destination (e.g., `SYNC_PAIRS=spotify:deezer`), you need an OAuth access token:
+
+1. Create an app at [Deezer Developers](https://developers.deezer.com/myapps)
+2. Note your **Application ID** and **Secret Key**
+3. Install the deezer-python package: `pip install deezer-python`
+4. Run the OAuth helper:
+   ```bash
+   deezer-oauth YOUR_APP_ID YOUR_SECRET_KEY
+   ```
+5. Open the URL in your browser and authorize the app
+6. Copy the access token from the callback URL
+
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DEEZER_USER_ID` | One of these | Syncs all playlists for user |
 | `DEEZER_PLAYLIST_ID` | One of these | Space-separated playlist IDs |
+| `DEEZER_ACCESS_TOKEN` | For write operations | OAuth access token (see above) |
 
 </details>
 

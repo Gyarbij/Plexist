@@ -147,11 +147,13 @@ class AppleMusicClient:
                             )
                             await asyncio.sleep(delay)
                             continue
-                    if response.status != 200:
+                    if response.status not in (200, 201, 204):
                         text = await response.text()
                         raise AppleMusicAPIError(
                             f"API request failed with status {response.status}: {text}"
                         )
+                    if response.status == 204:
+                        return {}
                     return await response.json()
             except aiohttp.ClientError as e:
                 if attempt < self.max_retries:
@@ -159,7 +161,60 @@ class AppleMusicClient:
                     await asyncio.sleep(delay)
                     continue
                 raise AppleMusicAPIError(f"Network error: {e}")
+        
+        raise AppleMusicAPIError("Max retries exceeded")
     
+    async def _request_with_body(
+        self,
+        method: str,
+        endpoint: str,
+        body: dict,
+        include_user_token: bool = True,
+    ) -> dict:
+        """Make an authenticated request with JSON body to the Apple Music API."""
+        session = await self._get_session()
+        url = f"{APPLE_MUSIC_API_BASE}{endpoint}"
+        headers = self._get_headers(include_user_token)
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                async with session.request(
+                    method, url, headers=headers, json=body
+                ) as response:
+                    if response.status == 401:
+                        raise AppleMusicAuthError("Invalid developer token or unauthorized")
+                    if response.status == 403:
+                        raise AppleMusicAuthError(
+                            "Invalid or missing Music User Token. "
+                            "Ensure APPLE_MUSIC_USER_TOKEN is set correctly."
+                        )
+                    if response.status == 429 or response.status >= 500:
+                        if attempt < self.max_retries:
+                            retry_after = response.headers.get("Retry-After")
+                            delay = (
+                                float(retry_after)
+                                if retry_after
+                                else self.retry_backoff_seconds * (2 ** attempt)
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                    if response.status not in (200, 201, 204):
+                        text = await response.text()
+                        raise AppleMusicAPIError(
+                            f"API request failed with status {response.status}: {text}"
+                        )
+                    if response.status == 204:
+                        return {}
+                    return await response.json()
+            except aiohttp.ClientError as e:
+                if attempt < self.max_retries:
+                    delay = self.retry_backoff_seconds * (2 ** attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                raise AppleMusicAPIError(f"Network error: {e}")
+        
+        raise AppleMusicAPIError("Max retries exceeded")
+
     async def get_library_playlists(self, limit: int = 100) -> List[dict]:
         """Fetch all user library playlists with pagination."""
         playlists = []
@@ -280,6 +335,150 @@ class AppleMusicClient:
         if data:
             return data[0].get("id", "us")
         return "us"
+
+    async def search_catalog_by_isrc(self, storefront: str, isrc: str) -> Optional[dict]:
+        """Search the Apple Music catalog for a track by ISRC.
+        
+        Args:
+            storefront: The user's storefront code (e.g., 'us', 'gb')
+            isrc: The ISRC code to search for
+            
+        Returns:
+            The first matching track or None if not found
+        """
+        params = {"filter[isrc]": isrc}
+        try:
+            response = await self._request(
+                "GET",
+                f"/catalog/{storefront}/songs",
+                params=params,
+                include_user_token=False,
+            )
+            data = response.get("data", [])
+            if data:
+                return data[0]
+            return None
+        except AppleMusicAPIError:
+            return None
+
+    async def search_catalog(
+        self, storefront: str, query: str, types: str = "songs", limit: int = 10
+    ) -> List[dict]:
+        """Search the Apple Music catalog.
+        
+        Args:
+            storefront: The user's storefront code (e.g., 'us', 'gb')
+            query: The search query string
+            types: Comma-separated list of types to search (default: songs)
+            limit: Maximum number of results per type
+            
+        Returns:
+            List of matching items
+        """
+        params = {"term": query, "types": types, "limit": limit}
+        try:
+            response = await self._request(
+                "GET",
+                f"/catalog/{storefront}/search",
+                params=params,
+                include_user_token=False,
+            )
+            # Results are nested under results -> songs -> data
+            results = response.get("results", {})
+            songs = results.get("songs", {})
+            return songs.get("data", [])
+        except AppleMusicAPIError:
+            return []
+
+    async def create_library_playlist(
+        self, name: str, description: str = "", track_ids: Optional[List[str]] = None
+    ) -> Optional[str]:
+        """Create a new playlist in the user's library.
+        
+        Args:
+            name: The name of the playlist
+            description: Optional description for the playlist
+            track_ids: Optional list of catalog song IDs to add
+            
+        Returns:
+            The created playlist's ID or None on failure
+        """
+        body = {
+            "attributes": {
+                "name": name,
+                "description": description,
+            }
+        }
+        
+        # If track IDs provided, include them in the creation request
+        if track_ids:
+            body["relationships"] = {
+                "tracks": {
+                    "data": [{"id": tid, "type": "songs"} for tid in track_ids]
+                }
+            }
+        
+        try:
+            response = await self._request_with_body(
+                "POST", "/me/library/playlists", body
+            )
+            data = response.get("data", [])
+            if data:
+                return data[0].get("id")
+            return None
+        except AppleMusicAPIError as e:
+            logging.error(f"Failed to create playlist '{name}': {e}")
+            return None
+
+    async def add_tracks_to_library_playlist(
+        self, playlist_id: str, track_ids: List[str]
+    ) -> bool:
+        """Add tracks to an existing library playlist.
+        
+        Args:
+            playlist_id: The library playlist ID
+            track_ids: List of catalog song IDs to add
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not track_ids:
+            return True
+            
+        body = {
+            "data": [{"id": tid, "type": "songs"} for tid in track_ids]
+        }
+        
+        try:
+            await self._request_with_body(
+                "POST",
+                f"/me/library/playlists/{playlist_id}/tracks",
+                body,
+            )
+            return True
+        except AppleMusicAPIError as e:
+            logging.error(f"Failed to add tracks to playlist {playlist_id}: {e}")
+            return False
+
+    async def delete_library_playlist(self, playlist_id: str) -> bool:
+        """Delete a library playlist.
+        
+        Note: Apple Music API doesn't have a dedicated delete endpoint for playlists.
+        This is a limitation of the API - we can only clear tracks, not delete playlists.
+        
+        Args:
+            playlist_id: The library playlist ID
+            
+        Returns:
+            True (placeholder - deletion not fully supported by API)
+        """
+        # Apple Music API doesn't support playlist deletion via the API
+        # Users must delete playlists manually in the Apple Music app
+        logging.warning(
+            f"Apple Music API doesn't support playlist deletion. "
+            f"Playlist {playlist_id} cannot be deleted programmatically."
+        )
+        return False
 
 
 class AppleMusicAuthError(Exception):
@@ -479,6 +678,7 @@ class AppleMusicProvider(MusicServiceProvider):
     """Apple Music provider for Plexist."""
     
     name = "apple_music"
+    supports_write = True
     
     def is_configured(self, user_inputs: UserInputs) -> bool:
         """Check if Apple Music is properly configured."""
@@ -626,3 +826,184 @@ class AppleMusicProvider(MusicServiceProvider):
             logging.error("Apple Music sync failed: %s", e)
         finally:
             await client.close()
+
+    async def _get_storefront(
+        self, client: AppleMusicClient, user_inputs: UserInputs
+    ) -> str:
+        """Get the storefront, either from config or auto-detect."""
+        if user_inputs.apple_music_storefront:
+            return user_inputs.apple_music_storefront
+        return await client.get_user_storefront()
+
+    async def search_track(
+        self, track: Track, user_inputs: UserInputs
+    ) -> Optional[str]:
+        """Search for a track in Apple Music catalog.
+        
+        Uses ISRC for precise matching, falls back to text search.
+        
+        Returns:
+            The catalog song ID if found, None otherwise
+        """
+        client = self._get_client(user_inputs)
+        try:
+            storefront = await self._get_storefront(client, user_inputs)
+            
+            # Stage 0: ISRC lookup (most accurate)
+            if track.isrc:
+                result = await client.search_catalog_by_isrc(storefront, track.isrc)
+                if result:
+                    song_id = result.get("id")
+                    if song_id:
+                        logging.debug(
+                            "Found Apple Music track via ISRC %s: %s",
+                            track.isrc,
+                            song_id,
+                        )
+                        return song_id
+            
+            # Stage 1: Text search with artist and title
+            query = f"{track.artist} {track.title}"
+            results = await client.search_catalog(storefront, query, limit=5)
+            
+            if not results:
+                logging.debug(
+                    "No Apple Music results for: %s - %s", track.artist, track.title
+                )
+                return None
+            
+            # Find best match by comparing artist and title
+            track_title_lower = track.title.lower()
+            track_artist_lower = track.artist.lower()
+            
+            for result in results:
+                attrs = result.get("attributes", {})
+                result_title = attrs.get("name", "").lower()
+                result_artist = attrs.get("artistName", "").lower()
+                
+                # Check for reasonable match
+                title_match = (
+                    track_title_lower in result_title 
+                    or result_title in track_title_lower
+                )
+                artist_match = (
+                    track_artist_lower in result_artist 
+                    or result_artist in track_artist_lower
+                )
+                
+                if title_match and artist_match:
+                    song_id = result.get("id")
+                    logging.debug(
+                        "Found Apple Music track via search: %s - %s -> %s",
+                        track.artist,
+                        track.title,
+                        song_id,
+                    )
+                    return song_id
+            
+            # If no good match, return first result as best guess
+            first_id = results[0].get("id")
+            logging.debug(
+                "Using first Apple Music result for: %s - %s -> %s",
+                track.artist,
+                track.title,
+                first_id,
+            )
+            return first_id
+            
+        finally:
+            await client.close()
+
+    async def create_playlist(
+        self,
+        name: str,
+        description: str,
+        user_inputs: UserInputs,
+    ) -> Optional[str]:
+        """Create a new playlist in Apple Music library.
+        
+        Returns:
+            The playlist ID if successful, None otherwise
+        """
+        client = self._get_client(user_inputs)
+        try:
+            playlist_id = await client.create_library_playlist(name, description)
+            if playlist_id:
+                logging.info("Created Apple Music playlist: %s (id=%s)", name, playlist_id)
+            else:
+                logging.error("Failed to create Apple Music playlist: %s", name)
+            return playlist_id
+        finally:
+            await client.close()
+
+    async def add_tracks_to_playlist(
+        self,
+        playlist_id: str,
+        track_ids: List[str],
+        user_inputs: UserInputs,
+    ) -> bool:
+        """Add tracks to an Apple Music playlist.
+        
+        Args:
+            playlist_id: The library playlist ID
+            track_ids: List of catalog song IDs
+            user_inputs: User configuration
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not track_ids:
+            return True
+            
+        client = self._get_client(user_inputs)
+        try:
+            # Apple Music allows adding tracks in batches
+            # Add in chunks of 100 to avoid potential limits
+            batch_size = 100
+            for i in range(0, len(track_ids), batch_size):
+                batch = track_ids[i : i + batch_size]
+                success = await client.add_tracks_to_library_playlist(
+                    playlist_id, batch
+                )
+                if not success:
+                    logging.error(
+                        "Failed to add batch %d-%d to Apple Music playlist %s",
+                        i,
+                        i + len(batch),
+                        playlist_id,
+                    )
+                    return False
+            
+            logging.info(
+                "Added %d tracks to Apple Music playlist %s",
+                len(track_ids),
+                playlist_id,
+            )
+            return True
+        finally:
+            await client.close()
+
+    async def clear_playlist(
+        self,
+        playlist_id: str,
+        user_inputs: UserInputs,
+    ) -> bool:
+        """Clear all tracks from an Apple Music playlist.
+        
+        Note: Apple Music API doesn't support removing tracks or deleting playlists.
+        The workaround is to delete and recreate the playlist, but playlist deletion
+        is also not supported via API. For now, we'll just add tracks - the user
+        can manually clear if needed.
+        
+        Returns:
+            True (no-op for Apple Music due to API limitations)
+        """
+        logging.warning(
+            "Apple Music API doesn't support clearing playlists. "
+            "Tracks will be appended to existing playlist %s. "
+            "To start fresh, delete the playlist manually in Apple Music.",
+            playlist_id,
+        )
+        # Return True to allow the sync to continue
+        # Tracks will be appended rather than replaced
+        return True

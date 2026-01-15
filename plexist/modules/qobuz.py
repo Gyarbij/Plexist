@@ -66,12 +66,15 @@ def _get_qobuz_playlists(
     playlists = []
     if all_qobuz_playlists:
         for playlist_data in all_qobuz_playlists:
+            images = playlist_data.get("images300", [])
+            poster = images[0] if images and len(images) > 0 else ""
+            
             playlists.append(
                 Playlist(
                     id=str(playlist_data.get("id", "")),
                     name=playlist_data.get("name", ""),
                     description=playlist_data.get("description", ""),
-                    poster=playlist_data.get("images300", [""])[0] if playlist_data.get("images300") else "",
+                    poster=poster,
                 )
             )
     return playlists
@@ -111,16 +114,7 @@ def extract_qobuz_track_metadata(track):
         Track: Track object with metadata
     """
     # Handle both Track objects and dict representations
-    if hasattr(track, '__dict__'):
-        # It's an object
-        title = getattr(track, 'title', '')
-        track_id = getattr(track, 'id', '')
-        artist = getattr(getattr(track, 'performer', None), 'name', '') if hasattr(track, 'performer') else ''
-        album_obj = getattr(track, 'album', None)
-        album = getattr(album_obj, 'title', '') if album_obj else ''
-        year = ''
-        genre = ''
-    else:
+    if isinstance(track, dict):
         # It's a dict
         title = track.get("title", "")
         track_id = track.get("id", "")
@@ -130,6 +124,15 @@ def extract_qobuz_track_metadata(track):
         release_date = album_data.get("release_date_original", "")
         year = release_date.split("-")[0] if release_date else ""
         genre = album_data.get("genre", {}).get("name", "")
+    else:
+        # It's an object
+        title = getattr(track, 'title', '')
+        track_id = getattr(track, 'id', '')
+        artist = getattr(getattr(track, 'performer', None), 'name', '') if hasattr(track, 'performer') else ''
+        album_obj = getattr(track, 'album', None)
+        album = getattr(album_obj, 'title', '') if album_obj else ''
+        year = ''
+        genre = ''
     
     url = f"https://play.qobuz.com/track/{track_id}"
     return Track(title, artist, album, url, year, genre)

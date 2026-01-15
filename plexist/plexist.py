@@ -81,7 +81,7 @@ def initialize_spotify_client(user_inputs):
         return None
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def initialize_tidal_session(user_inputs: UserInputs) -> tidalapi.Session:
+def initialize_tidal_session(user_inputs: UserInputs):
     """Initialize Tidal session with user credentials.
     
     Args:

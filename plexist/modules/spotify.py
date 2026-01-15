@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Set
+from typing import List
 
 import spotipy
 from plexapi.server import PlexServer
@@ -151,6 +151,9 @@ class SpotifyProvider(MusicServiceProvider):
 
     async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
         sp = await self._get_client(user_inputs)
+        if not user_inputs.spotify_user_id:
+            logging.error("Spotify user ID is not configured")
+            return []
         return await _get_sp_user_playlists(sp, user_inputs.spotify_user_id)
 
     async def get_tracks(

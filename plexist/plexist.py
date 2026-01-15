@@ -98,16 +98,10 @@ def initialize_tidal_session(user_inputs):
 def initialize_qobuz_client(user_inputs):
     if user_inputs.qobuz_app_id:
         try:
-            qobuz.register_app(user_inputs.qobuz_app_id)
-            if user_inputs.qobuz_username and user_inputs.qobuz_password:
-                # If credentials are provided, attempt to authenticate
-                qobuz_client = qobuz
-                # Note: The qobuz library may need additional setup for authentication
-                # This is a basic implementation
-                return qobuz_client
-            else:
-                # Return client without authentication for public access
-                return qobuz
+            qobuz.api.register_app(user_inputs.qobuz_app_id)
+            # Return the qobuz module itself as it provides access to all API methods
+            # after registration
+            return qobuz
         except Exception as e:
             logging.error(f"Qobuz Authorization error: {e}")
             raise  # Re-raise the exception to trigger retry

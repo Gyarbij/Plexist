@@ -52,12 +52,19 @@ def _get_tidal_playlists(
     playlists = []
     if tidal_playlists:
         for playlist in tidal_playlists:
+            poster_url = ""
+            if hasattr(playlist, 'image') and callable(playlist.image):
+                try:
+                    poster_url = playlist.image(640)
+                except Exception:
+                    poster_url = ""
+            
             playlists.append(
                 Playlist(
                     id=playlist.id,
                     name=playlist.name,
                     description=playlist.description or "",
-                    poster=playlist.image(640) if playlist.image else "",
+                    poster=poster_url,
                 )
             )
     return playlists

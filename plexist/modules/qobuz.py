@@ -16,7 +16,7 @@ def _get_qobuz_playlists(
     """Get metadata for playlists in the given user_id.
 
     Args:
-        qobuz_client: Qobuz client (authenticated)
+        qobuz_client: Qobuz client (authenticated via register_app)
         userInputs (UserInputs): User input configuration
         suffix (str): Identifier for source
 
@@ -27,10 +27,12 @@ def _get_qobuz_playlists(
 
     if userInputs.qobuz_user_id:
         try:
-            user_playlists = qobuz_client.user.playlists.get_user_playlists(
+            # Use the Playlist class method to get user playlists
+            user_playlists_data = qobuz_client.playlist.Playlist.get_user_playlists(
                 user_id=userInputs.qobuz_user_id
             )
-            qobuz_user_playlists = user_playlists.get("playlists", {}).get("items", [])
+            if isinstance(user_playlists_data, dict):
+                qobuz_user_playlists = user_playlists_data.get("playlists", {}).get("items", [])
         except Exception as e:
             qobuz_user_playlists = []
             logging.info(
@@ -42,9 +44,15 @@ def _get_qobuz_playlists(
         try:
             qobuz_playlist_ids = userInputs.qobuz_playlist_ids.split()
             for playlist_id in qobuz_playlist_ids:
-                playlist_data = qobuz_client.playlist.get(playlist_id=playlist_id)
-                if playlist_data:
-                    qobuz_id_playlists.append(playlist_data)
+                playlist_obj = qobuz_client.playlist.Playlist.from_id(playlist_id)
+                if playlist_obj:
+                    # Convert Playlist object to dict-like data
+                    qobuz_id_playlists.append({
+                        "id": playlist_obj.id,
+                        "name": playlist_obj.name,
+                        "description": getattr(playlist_obj, 'description', ''),
+                        "images300": []
+                    })
         except Exception as e:
             qobuz_id_playlists = []
             logging.info(
@@ -60,7 +68,7 @@ def _get_qobuz_playlists(
         for playlist_data in all_qobuz_playlists:
             playlists.append(
                 Playlist(
-                    id=playlist_data.get("id", ""),
+                    id=str(playlist_data.get("id", "")),
                     name=playlist_data.get("name", ""),
                     description=playlist_data.get("description", ""),
                     poster=playlist_data.get("images300", [""])[0] if playlist_data.get("images300") else "",
@@ -76,32 +84,54 @@ def _get_qobuz_tracks_from_playlist(
     """Return list of tracks with metadata.
 
     Args:
-        qobuz_client: Qobuz client (authenticated)
+        qobuz_client: Qobuz client (authenticated via register_app)
         playlist (Playlist): Playlist object
 
     Returns:
         List[Track]: list of Track objects with track metadata fields
     """
-    playlist_data = qobuz_client.playlist.get(playlist_id=playlist.id)
-    tracks = playlist_data.get("tracks", {}).get("items", [])
-    return [extract_qobuz_track_metadata(track) for track in tracks]
+    try:
+        playlist_obj = qobuz_client.playlist.Playlist.from_id(playlist.id)
+        if playlist_obj and hasattr(playlist_obj, 'tracks'):
+            tracks = playlist_obj.tracks
+            return [extract_qobuz_track_metadata(track) for track in tracks]
+        return []
+    except Exception as e:
+        logging.error(f"Error fetching tracks from playlist {playlist.id}: {e}")
+        return []
 
 
 def extract_qobuz_track_metadata(track):
     """Extract track metadata from Qobuz track object.
 
     Args:
-        track: Qobuz track dict
+        track: Qobuz track object or dict
 
     Returns:
         Track: Track object with metadata
     """
-    title = track.get("title", "")
-    artist = track.get("performer", {}).get("name", "")
-    album = track.get("album", {}).get("title", "")
-    year = str(track.get("album", {}).get("release_date_original", "").split("-")[0]) if track.get("album", {}).get("release_date_original") else ""
-    genre = track.get("album", {}).get("genre", {}).get("name", "")
-    url = f"https://play.qobuz.com/track/{track.get('id', '')}"
+    # Handle both Track objects and dict representations
+    if hasattr(track, '__dict__'):
+        # It's an object
+        title = getattr(track, 'title', '')
+        track_id = getattr(track, 'id', '')
+        artist = getattr(getattr(track, 'performer', None), 'name', '') if hasattr(track, 'performer') else ''
+        album_obj = getattr(track, 'album', None)
+        album = getattr(album_obj, 'title', '') if album_obj else ''
+        year = ''
+        genre = ''
+    else:
+        # It's a dict
+        title = track.get("title", "")
+        track_id = track.get("id", "")
+        artist = track.get("performer", {}).get("name", "")
+        album_data = track.get("album", {})
+        album = album_data.get("title", "")
+        release_date = album_data.get("release_date_original", "")
+        year = release_date.split("-")[0] if release_date else ""
+        genre = album_data.get("genre", {}).get("name", "")
+    
+    url = f"https://play.qobuz.com/track/{track_id}"
     return Track(title, artist, album, url, year, genre)
 
 

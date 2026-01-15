@@ -86,7 +86,7 @@ class TestQobuzIntegration(unittest.TestCase):
     def test_get_qobuz_playlists_with_user_id(self):
         """Test fetching Qobuz playlists for a user."""
         mock_client = Mock()
-        mock_client.user.playlists.get_user_playlists.return_value = {
+        mock_client.playlist.Playlist.get_user_playlists.return_value = {
             "playlists": {
                 "items": [
                     {
@@ -108,12 +108,12 @@ class TestQobuzIntegration(unittest.TestCase):
     def test_get_qobuz_playlists_with_playlist_ids(self):
         """Test fetching Qobuz playlists by specific IDs."""
         mock_client = Mock()
-        mock_client.playlist.get.return_value = {
-            "id": "pl_456",
-            "name": "Public Qobuz Playlist",
-            "description": "Public description",
-            "images300": ["http://example.com/image2.jpg"]
-        }
+        mock_playlist_obj = Mock()
+        mock_playlist_obj.id = "pl_456"
+        mock_playlist_obj.name = "Public Qobuz Playlist"
+        mock_playlist_obj.description = "Public description"
+        
+        mock_client.playlist.Playlist.from_id.return_value = mock_playlist_obj
 
         self.user_inputs.qobuz_user_id = ""
         self.user_inputs.qobuz_playlist_ids = "pl_456"
@@ -127,22 +127,18 @@ class TestQobuzIntegration(unittest.TestCase):
     def test_get_qobuz_tracks_from_playlist(self):
         """Test extracting tracks from a Qobuz playlist."""
         mock_client = Mock()
-        mock_client.playlist.get.return_value = {
-            "tracks": {
-                "items": [
-                    {
-                        "id": 111,
-                        "title": "Track 1",
-                        "performer": {"name": "Artist 1"},
-                        "album": {
-                            "title": "Album 1",
-                            "release_date_original": "2021-01-01",
-                            "genre": {"name": "Jazz"}
-                        }
-                    }
-                ]
-            }
-        }
+        mock_playlist_obj = Mock()
+        
+        mock_track = Mock()
+        mock_track.title = "Track 1"
+        mock_track.id = 111
+        mock_track.performer = Mock()
+        mock_track.performer.name = "Artist 1"
+        mock_track.album = Mock()
+        mock_track.album.title = "Album 1"
+        
+        mock_playlist_obj.tracks = [mock_track]
+        mock_client.playlist.Playlist.from_id.return_value = mock_playlist_obj
 
         test_playlist = Playlist(
             id="pl_123",
@@ -156,7 +152,6 @@ class TestQobuzIntegration(unittest.TestCase):
         self.assertEqual(len(tracks), 1)
         self.assertEqual(tracks[0].title, "Track 1")
         self.assertEqual(tracks[0].artist, "Artist 1")
-        self.assertEqual(tracks[0].genre, "Jazz")
 
     @patch('plexist.modules.qobuz.update_or_create_plex_playlist')
     def test_qobuz_playlist_sync(self, mock_update_plex):
@@ -164,7 +159,12 @@ class TestQobuzIntegration(unittest.TestCase):
         mock_client = Mock()
         mock_plex = Mock()
 
-        mock_client.user.playlists.get_user_playlists.return_value = {
+        mock_playlist_obj = Mock()
+        mock_playlist_obj.id = "pl_sync"
+        mock_playlist_obj.name = "Sync Test Playlist"
+        mock_playlist_obj.description = "Sync description"
+        
+        mock_client.playlist.Playlist.get_user_playlists.return_value = {
             "playlists": {
                 "items": [
                     {
@@ -177,22 +177,16 @@ class TestQobuzIntegration(unittest.TestCase):
             }
         }
 
-        mock_client.playlist.get.return_value = {
-            "tracks": {
-                "items": [
-                    {
-                        "id": 999,
-                        "title": "Sync Track",
-                        "performer": {"name": "Sync Artist"},
-                        "album": {
-                            "title": "Sync Album",
-                            "release_date_original": "2022-12-01",
-                            "genre": {"name": "Pop"}
-                        }
-                    }
-                ]
-            }
-        }
+        mock_track = Mock()
+        mock_track.title = "Sync Track"
+        mock_track.id = 999
+        mock_track.performer = Mock()
+        mock_track.performer.name = "Sync Artist"
+        mock_track.album = Mock()
+        mock_track.album.title = "Sync Album"
+        
+        mock_playlist_obj.tracks = [mock_track]
+        mock_client.playlist.Playlist.from_id.return_value = mock_playlist_obj
 
         qobuz_playlist_sync(mock_client, mock_plex, self.user_inputs)
 

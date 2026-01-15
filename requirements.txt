@@ -45,6 +45,8 @@ idna==3.11
     #   httpx
     #   requests
     #   yarl
+iniconfig==2.3.0
+    # via pytest
 isodate==0.7.2
     # via tidalapi
 mpegdash==0.4.0
@@ -53,8 +55,12 @@ multidict==6.7.0
     # via
     #   aiohttp
     #   yarl
+packaging==25.0
+    # via pytest
 plexapi==4.17.2
     # via -r requirements.in
+pluggy==1.6.0
+    # via pytest
 propcache==0.4.1
     # via
     #   aiohttp
@@ -73,7 +79,13 @@ pydantic-core==2.41.5
     #   pydantic
 pydantic-settings==2.12.0
     # via -r requirements.in
+pygments==2.19.2
+    # via pytest
 pyjwt==2.10.1
+    # via -r requirements.in
+pytest==9.0.2
+    # via pytest-asyncio
+pytest-asyncio==1.3.0
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via tidalapi
@@ -104,6 +116,7 @@ typing-extensions==4.15.0
     #   anyio
     #   pydantic
     #   pydantic-core
+    #   pytest-asyncio
     #   tidalapi
     #   typing-inspection
 typing-inspection==0.4.2

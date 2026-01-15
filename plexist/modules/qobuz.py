@@ -355,11 +355,23 @@ def _extract_playlist_metadata(playlist_data: Dict[str, Any]) -> Playlist:
     
     # Extract artwork URL
     poster = ""
-    images = playlist_data.get("images300", [])
-    if images and isinstance(images, list) and len(images) > 0:
-        poster = images[0]
-    elif playlist_data.get("image_rectangle"):
-        poster = playlist_data.get("image_rectangle", [""])[0] if playlist_data.get("image_rectangle") else ""
+    def _pick_image(image_value: Any) -> str:
+        if isinstance(image_value, list) and image_value:
+            return image_value[0]
+        if isinstance(image_value, dict) and image_value:
+            return (
+                image_value.get("large")
+                or image_value.get("medium")
+                or image_value.get("small")
+                or next(iter(image_value.values()), "")
+            )
+        if isinstance(image_value, str):
+            return image_value
+        return ""
+
+    poster = _pick_image(playlist_data.get("images300", []))
+    if not poster:
+        poster = _pick_image(playlist_data.get("image_rectangle", {}))
     
     return Playlist(
         id=playlist_id,

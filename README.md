@@ -10,7 +10,6 @@
   <img src="./assets/plexist.png" width="802" alt="Plexist Logo" />
 </p>
 
----
 
 ## Features
 
@@ -28,13 +27,11 @@
 - **Apple Music**
 - **Tidal**
 - **Qobuz**
----
 
 ## What it will NOT do:
 
 * Steal Shit!
 
----
 
 ## Prerequisites
 
@@ -45,7 +42,6 @@
 | `PLEX_URL` | Your Plex server URL (e.g., `http://192.168.0.69:32400`) |
 | `PLEX_TOKEN` | Your Plex authentication token — [How to find it](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
 
----
 
 ## Service Configuration
 
@@ -191,8 +187,6 @@ Qobuz doesn't have a public API. Use tools like [qobuz-dl](https://github.com/vi
 
 </details>
 
----
-
 ## Installation
 
 ### Quick Start (One-time Run)
@@ -216,8 +210,6 @@ PLEX_TOKEN=your-plex-token
 LOG_LEVEL=INFO
 LOG_FORMAT=plain
 ```
-
----
 
 ## 🐳 Docker Deployment
 
@@ -261,7 +253,6 @@ Multi-platform images available on [Docker Hub](https://hub.docker.com/r/gyarbij
 > **💡 For slower servers** (Synology NAS, Raspberry Pi, older hardware):  
 > Lower these values to `2` each to reduce CPU load and avoid connection pool warnings.
 
----
 
 ### Docker Run
 
@@ -344,8 +335,6 @@ docker run -d \
 > **⚠️ Note:** Remove the comments (`# ...`) before running the command.
 
 </details>
-
----
 
 ### Docker Compose
 
@@ -464,8 +453,6 @@ SPOTIFY_USER_ID=your-user-id
 
 </details>
 
----
-
 ## Testing
 
 ```bash
@@ -476,13 +463,9 @@ pip3 install -r requirements-dev.txt
 pytest
 ```
 
----
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
 
 ## License
 

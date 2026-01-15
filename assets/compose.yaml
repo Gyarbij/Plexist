@@ -2,6 +2,9 @@ services:
   plexist:
     container_name: plexist
     image: gyarbij/plexist:latest
+    # Optional: load variables from an env file (use alongside or instead of inline envs)
+    env_file:
+      - ../example.env
     environment:
       - PLEX_URL=http://#.#.#.#:32400
       - PLEX_TOKEN=<your plex token>
@@ -13,11 +16,13 @@ services:
       - SECONDS_TO_WAIT=84000
       - MAX_REQUESTS_PER_SECOND=5
       - MAX_CONCURRENT_REQUESTS=4
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=plain
       - SPOTIFY_CLIENT_ID=<your spotify client id>
       - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
       - SPOTIFY_USER_ID=<your spotify user id>
       - DEEZER_USER_ID=<deezer user id>
-      - DEEZER_PLAYLIST_ID=https://www.deezer.com/en/playlist/10484834882
+      - DEEZER_PLAYLIST_ID=10484834882
     volumes:
       - <YOURPATH>:/app/data
     restart: unless-stopped

@@ -17,7 +17,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .helperClasses import Playlist, Track, UserInputs
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 DB_PATH = os.getenv("DB_PATH", "plexist.db")
 

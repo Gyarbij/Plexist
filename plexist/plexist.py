@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
 import asyncio
+import json
 import logging
+import os
+from datetime import datetime, timezone
+
 from plexapi.server import PlexServer
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -14,7 +18,33 @@ from modules.plex import initialize_db, initialize_cache, configure_rate_limitin
 from modules import spotify  # noqa: F401
 from modules import deezer  # noqa: F401
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+def setup_logging() -> None:
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_format = os.getenv("LOG_FORMAT", "plain").lower()
+
+    class JsonFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            payload = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+            if record.exc_info:
+                payload["exception"] = self.formatException(record.exc_info)
+            return json.dumps(payload, ensure_ascii=False)
+
+    handler = logging.StreamHandler()
+    if log_format == "json":
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        )
+
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(log_level)
 
 def read_environment_variables() -> UserInputs:
     settings = PlexistSettings()
@@ -35,6 +65,7 @@ async def initialize_plex_server(user_inputs):
         return None
 
 async def main():
+    setup_logging()
     await initialize_db()
     user_inputs = read_environment_variables()
     

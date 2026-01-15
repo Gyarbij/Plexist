@@ -8,3 +8,4 @@ requests
 aiosqlite
 pydantic-settings
 pydantic
+aiolimiter

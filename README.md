@@ -45,7 +45,21 @@ One-time run installation steps:
 git clone https://github.com/Gyarbij/Plexist.git
 cd Plexist
 pip3 install -r requirements.txt
-python3 plexist.py
+python3 plexist/plexist.py
+```
+
+### Environment Configuration (.env)
+
+You can use a .env file in the project root. All environment variables below are supported, along with:
+- LOG_LEVEL (default: INFO)
+- LOG_FORMAT (plain or json, default: plain)
+
+Example:
+```
+PLEX_URL=http://192.168.0.2:32400
+PLEX_TOKEN=your-plex-token
+LOG_LEVEL=INFO
+LOG_FORMAT=json
 ```
 
 ## Docker Deployment
@@ -70,11 +84,13 @@ docker run -d \
   -e SECONDS_TO_WAIT=84000              # Seconds to wait between syncs
   -e MAX_REQUESTS_PER_SECOND=5          # Max Plex API requests per second (Default 5, lower for slow servers)
   -e MAX_CONCURRENT_REQUESTS=4          # Max concurrent Plex requests (Default 4, lower to reduce CPU load)
+  -e LOG_LEVEL=INFO                      # Logging level (DEBUG, INFO, WARNING, ERROR)
+  -e LOG_FORMAT=plain                    # plain or json
   -e SPOTIFY_CLIENT_ID=                 # Your Spotify Client/App ID
   -e SPOTIFY_CLIENT_SECRET=             # Your Spotify client secret
   -e SPOTIFY_USER_ID=                   # Spotify ID to sync (Sync's all playlist)
   -e DEEZER_USER_ID=                    # Deezer ID to sync (Sync's all playlist)
-  -e DEEZER_PLAYLIST_ID=                # Individual playlist
+  -e DEEZER_PLAYLIST_ID=                # Deezer playlist IDs (space-separated)
   gyarbij/plexist:latest
 
 ```
@@ -115,17 +131,28 @@ services:
       - SECONDS_TO_WAIT=84000    # Seconds to wait between syncs
       - MAX_REQUESTS_PER_SECOND=5  # Max Plex API requests per second (Default 5)
       - MAX_CONCURRENT_REQUESTS=4  # Max concurrent Plex requests (Default 4)
+      - LOG_LEVEL=INFO             # Logging level (DEBUG, INFO, WARNING, ERROR)
+      - LOG_FORMAT=plain           # plain or json
       - SPOTIFY_CLIENT_ID=       # your spotify client id
       - SPOTIFY_CLIENT_SECRET=   # your spotify client secret
       - SPOTIFY_USER_ID=         # your spotify user id
       - DEEZER_USER_ID=          # your deezer user id
-      - DEEZER_PLAYLIST_ID=      # deezer playlist ids space separated
+      - DEEZER_PLAYLIST_ID=      # deezer playlist ids space separated (numbers only)
     restart: unless-stopped
 
 ```
 And run with :
 ```
 docker-compose up
+```
+
+## Testing
+
+Async tests use pytest-asyncio. Install dev dependencies and run tests:
+
+```
+pip3 install -r requirements-dev.txt
+pytest
 ```
 
 ## Contributing

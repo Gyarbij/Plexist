@@ -40,10 +40,12 @@ Sync playlists between any two services — not just to Plex! Configure source �
 |---------|:-------------:|:-------------------:|
 | Spotify | ✅ | ❌ |
 | Deezer | ✅ | ✅ |
-| Apple Music | ✅ | ❌ |
+| Apple Music | ✅ | ✅* |
 | Tidal | ✅ | ✅ |
 | Qobuz | ✅ | ✅ |
 | Plex | ✅ | ✅ |
+
+*\*Apple Music write has limitations: the API doesn't support clearing/deleting playlists, so tracks are appended to existing playlists rather than replaced.*
 
 #### Configuration
 

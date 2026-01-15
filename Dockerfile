@@ -1,35 +1,31 @@
-FROM python:3.14.2 AS builder
+# ---------- builder ----------
+FROM python:3.14.2-slim AS builder
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_PRE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-ENV PYTHONDONTWRITEBYTECODE=1
-
-ENV PYTHONUNBUFFERED=1
-
-# Allow pre-release wheels for Python 3.14
-ENV PIP_PRE=1
-
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libffi-dev \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
+WORKDIR /build
 COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --only-binary=:all: -r requirements.txt --prefix=/install
 
-FROM python:3.14.2-slim AS runtime
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/python -m pip install --upgrade pip \
+ && /opt/venv/bin/pip install --no-cache-dir --only-binary=:all: --no-deps -r requirements.txt
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-COPY --from=builder /install /usr/local
+# ---------- runtime ----------
+FROM gcr.io/distroless/base-debian13:nonroot AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:/usr/local/bin:$PATH"
 
 WORKDIR /app
+
+# Copy the Python runtime from the python image
+COPY --from=builder /usr/local /usr/local
+
+# Copy dependencies + app
+COPY --from=builder /opt/venv /opt/venv
 COPY plexist /app/plexist
-COPY example.env /app/example.env
 
-RUN adduser -u 5678 --disabled-password --gecos "" plexist && chown -R plexist /app
-USER plexist
-
+USER 65532
 CMD ["python", "plexist/plexist.py"]
-
-# docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t gyarbij/plexist:<tag> --push .

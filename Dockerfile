@@ -4,6 +4,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 ENV PYTHONUNBUFFERED=1
 
+# Allow PyO3-based deps (pydantic-core) to build on Python 3.14
+ENV PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+ENV PIP_PRE=1
+
 RUN apt-get update && apt-get install -y \
     gcc \
     libffi-dev \

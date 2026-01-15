@@ -1,11 +1,33 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Annotated, Any, Optional
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from modules.helperClasses import UserInputs
+
+
+def parse_flexible_bool(value: Any) -> bool:
+    """Parse boolean from various string formats.
+    
+    Accepts: 1, 0, y, yes, n, no, true, false, on, off (case-insensitive)
+    Maintains backwards compatibility with 0/1.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("1", "y", "yes", "true", "on"):
+            return True
+        if normalized in ("0", "n", "no", "false", "off", ""):
+            return False
+    raise ValueError(f"Cannot parse '{value}' as boolean. Use: 1/0, y/n, yes/no, true/false, on/off")
+
+
+FlexibleBool = Annotated[bool, BeforeValidator(parse_flexible_bool)]
 
 
 class PlexistSettings(BaseSettings):
@@ -14,19 +36,19 @@ class PlexistSettings(BaseSettings):
     plex_url: Optional[str] = Field(default=None, validation_alias="PLEX_URL")
     plex_token: Optional[str] = Field(default=None, validation_alias="PLEX_TOKEN")
 
-    write_missing_as_csv: bool = Field(
+    write_missing_as_csv: FlexibleBool = Field(
         default=False, validation_alias="WRITE_MISSING_AS_CSV"
     )
-    write_missing_as_json: bool = Field(
+    write_missing_as_json: FlexibleBool = Field(
         default=False, validation_alias="WRITE_MISSING_AS_JSON"
     )
-    add_playlist_poster: bool = Field(
+    add_playlist_poster: FlexibleBool = Field(
         default=True, validation_alias="ADD_PLAYLIST_POSTER"
     )
-    add_playlist_description: bool = Field(
+    add_playlist_description: FlexibleBool = Field(
         default=True, validation_alias="ADD_PLAYLIST_DESCRIPTION"
     )
-    append_instead_of_sync: bool = Field(
+    append_instead_of_sync: FlexibleBool = Field(
         default=False, validation_alias="APPEND_INSTEAD_OF_SYNC"
     )
     wait_seconds: int = Field(default=86400, validation_alias="SECONDS_TO_WAIT")
@@ -54,7 +76,7 @@ class PlexistSettings(BaseSettings):
     deezer_playlist_ids: Optional[str] = Field(
         default=None, validation_alias="DEEZER_PLAYLIST_ID"
     )
-    sync_liked_tracks: bool = Field(
+    sync_liked_tracks: FlexibleBool = Field(
         default=False, validation_alias="SYNC_LIKED_TRACKS"
     )
 

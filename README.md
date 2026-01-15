@@ -215,6 +215,14 @@ LOG_FORMAT=plain
 
 Multi-platform images available on [Docker Hub](https://hub.docker.com/r/gyarbij/plexist/).
 
+### Boolean Values
+
+All boolean options accept flexible values (case-insensitive):
+
+| Enable | Disable |
+|--------|---------|
+| `1`, `y`, `yes`, `true`, `on` | `0`, `n`, `no`, `false`, `off` |
+
 ### Environment Variables Reference
 
 #### Core Settings
@@ -231,17 +239,17 @@ Multi-platform images available on [Docker Hub](https://hub.docker.com/r/gyarbij
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADD_PLAYLIST_POSTER` | `1` | Add poster artwork to playlists |
-| `ADD_PLAYLIST_DESCRIPTION` | `1` | Add description to playlists |
-| `APPEND_INSTEAD_OF_SYNC` | `0` | `0` = Full sync, `1` = Append only (no removals) |
-| `SYNC_LIKED_TRACKS` | `0` | Sync liked tracks to Plex 5-star ratings |
+| `ADD_PLAYLIST_POSTER` | `yes` | Add poster artwork to playlists |
+| `ADD_PLAYLIST_DESCRIPTION` | `yes` | Add description to playlists |
+| `APPEND_INSTEAD_OF_SYNC` | `no` | `no` = Full sync, `yes` = Append only (no removals) |
+| `SYNC_LIKED_TRACKS` | `no` | Sync liked tracks to Plex 5-star ratings |
 
 #### Output Options
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WRITE_MISSING_AS_CSV` | `0` | Write missing tracks to CSV file |
-| `WRITE_MISSING_AS_JSON` | `0` | Write missing tracks to JSON file |
+| `WRITE_MISSING_AS_CSV` | `no` | Write missing tracks to CSV file |
+| `WRITE_MISSING_AS_JSON` | `no` | Write missing tracks to JSON file |
 
 #### Performance Tuning
 
@@ -265,12 +273,12 @@ docker run -d \
   -e SECONDS_TO_WAIT=84000 \
   -e LOG_LEVEL=INFO \
   -e LOG_FORMAT=plain \
-  -e WRITE_MISSING_AS_CSV=0 \
-  -e WRITE_MISSING_AS_JSON=0 \
-  -e ADD_PLAYLIST_POSTER=1 \
-  -e ADD_PLAYLIST_DESCRIPTION=1 \
-  -e APPEND_INSTEAD_OF_SYNC=0 \
-  -e SYNC_LIKED_TRACKS=0 \
+  -e WRITE_MISSING_AS_CSV=no \
+  -e WRITE_MISSING_AS_JSON=no \
+  -e ADD_PLAYLIST_POSTER=yes \
+  -e ADD_PLAYLIST_DESCRIPTION=yes \
+  -e APPEND_INSTEAD_OF_SYNC=no \
+  -e SYNC_LIKED_TRACKS=no \
   -e MAX_REQUESTS_PER_SECOND=5 \
   -e MAX_CONCURRENT_REQUESTS=4 \
   -e SPOTIFY_CLIENT_ID=your-client-id \
@@ -294,12 +302,12 @@ docker run -d \
   -e LOG_LEVEL=INFO \
   -e LOG_FORMAT=plain \
   # === Playlist Options ===
-  -e WRITE_MISSING_AS_CSV=0 \
-  -e WRITE_MISSING_AS_JSON=0 \
-  -e ADD_PLAYLIST_POSTER=1 \
-  -e ADD_PLAYLIST_DESCRIPTION=1 \
-  -e APPEND_INSTEAD_OF_SYNC=0 \
-  -e SYNC_LIKED_TRACKS=0 \
+  -e WRITE_MISSING_AS_CSV=no \
+  -e WRITE_MISSING_AS_JSON=no \
+  -e ADD_PLAYLIST_POSTER=yes \
+  -e ADD_PLAYLIST_DESCRIPTION=yes \
+  -e APPEND_INSTEAD_OF_SYNC=no \
+  -e SYNC_LIKED_TRACKS=no \
   # === Performance ===
   -e MAX_REQUESTS_PER_SECOND=5 \
   -e MAX_CONCURRENT_REQUESTS=4 \
@@ -355,12 +363,12 @@ services:
       LOG_FORMAT: plain
 
       # === Playlist Options ===
-      WRITE_MISSING_AS_CSV: 0
-      WRITE_MISSING_AS_JSON: 0
-      ADD_PLAYLIST_POSTER: 1
-      ADD_PLAYLIST_DESCRIPTION: 1
-      APPEND_INSTEAD_OF_SYNC: 0
-      SYNC_LIKED_TRACKS: 0
+      WRITE_MISSING_AS_CSV: no
+      WRITE_MISSING_AS_JSON: no
+      ADD_PLAYLIST_POSTER: yes
+      ADD_PLAYLIST_DESCRIPTION: yes
+      APPEND_INSTEAD_OF_SYNC: no
+      SYNC_LIKED_TRACKS: no
 
       # === Performance ===
       MAX_REQUESTS_PER_SECOND: 5

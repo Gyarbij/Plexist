@@ -65,3 +65,66 @@ def test_settings_from_environment(monkeypatch):
     assert user_inputs.apple_music_request_timeout_seconds == 15
     assert user_inputs.apple_music_max_retries == 5
     assert user_inputs.apple_music_retry_backoff_seconds == 2.5
+
+
+def test_flexible_bool_parsing(monkeypatch):
+    """Test that boolean settings accept various formats (y/n, yes/no, true/false, on/off, 1/0)."""
+    monkeypatch.setenv("PLEX_URL", "http://plex")
+    monkeypatch.setenv("PLEX_TOKEN", "token")
+    
+    # Test 'yes'/'no' format
+    monkeypatch.setenv("WRITE_MISSING_AS_CSV", "yes")
+    monkeypatch.setenv("WRITE_MISSING_AS_JSON", "no")
+    monkeypatch.setenv("ADD_PLAYLIST_POSTER", "YES")  # Case insensitive
+    monkeypatch.setenv("ADD_PLAYLIST_DESCRIPTION", "NO")
+    monkeypatch.setenv("APPEND_INSTEAD_OF_SYNC", "y")
+    monkeypatch.setenv("SYNC_LIKED_TRACKS", "n")
+    
+    settings = PlexistSettings()
+    
+    assert settings.write_missing_as_csv is True
+    assert settings.write_missing_as_json is False
+    assert settings.add_playlist_poster is True
+    assert settings.add_playlist_description is False
+    assert settings.append_instead_of_sync is True
+    assert settings.sync_liked_tracks is False
+
+
+def test_flexible_bool_true_false_format(monkeypatch):
+    """Test that boolean settings accept true/false and on/off formats."""
+    monkeypatch.setenv("PLEX_URL", "http://plex")
+    monkeypatch.setenv("PLEX_TOKEN", "token")
+    
+    monkeypatch.setenv("WRITE_MISSING_AS_CSV", "true")
+    monkeypatch.setenv("WRITE_MISSING_AS_JSON", "false")
+    monkeypatch.setenv("ADD_PLAYLIST_POSTER", "on")
+    monkeypatch.setenv("ADD_PLAYLIST_DESCRIPTION", "off")
+    monkeypatch.setenv("APPEND_INSTEAD_OF_SYNC", "TRUE")
+    monkeypatch.setenv("SYNC_LIKED_TRACKS", "FALSE")
+    
+    settings = PlexistSettings()
+    
+    assert settings.write_missing_as_csv is True
+    assert settings.write_missing_as_json is False
+    assert settings.add_playlist_poster is True
+    assert settings.add_playlist_description is False
+    assert settings.append_instead_of_sync is True
+    assert settings.sync_liked_tracks is False
+
+
+def test_flexible_bool_backwards_compatibility(monkeypatch):
+    """Test that 0/1 format still works for backwards compatibility."""
+    monkeypatch.setenv("PLEX_URL", "http://plex")
+    monkeypatch.setenv("PLEX_TOKEN", "token")
+    
+    monkeypatch.setenv("WRITE_MISSING_AS_CSV", "1")
+    monkeypatch.setenv("WRITE_MISSING_AS_JSON", "0")
+    monkeypatch.setenv("ADD_PLAYLIST_POSTER", "1")
+    monkeypatch.setenv("ADD_PLAYLIST_DESCRIPTION", "0")
+    
+    settings = PlexistSettings()
+    
+    assert settings.write_missing_as_csv is True
+    assert settings.write_missing_as_json is False
+    assert settings.add_playlist_poster is True
+    assert settings.add_playlist_description is False

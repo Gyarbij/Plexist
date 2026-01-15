@@ -20,12 +20,12 @@ services:
       LOG_FORMAT: plain
 
       # === Playlist Options ===
-      WRITE_MISSING_AS_CSV: 0
-      WRITE_MISSING_AS_JSON: 0
-      ADD_PLAYLIST_POSTER: 1
-      ADD_PLAYLIST_DESCRIPTION: 1
-      APPEND_INSTEAD_OF_SYNC: 0
-      SYNC_LIKED_TRACKS: 0
+      WRITE_MISSING_AS_CSV: no
+      WRITE_MISSING_AS_JSON: no
+      ADD_PLAYLIST_POSTER: yes
+      ADD_PLAYLIST_DESCRIPTION: yes
+      APPEND_INSTEAD_OF_SYNC: no
+      SYNC_LIKED_TRACKS: no
 
       # === Performance Tuning ===
       # Lower these values for slower servers (Synology, Raspberry Pi, etc.)

@@ -49,7 +49,9 @@ async def _get_sp_tracks_from_playlist(
         url = track["track"]["external_urls"].get("spotify", "")
         year = ""  # Default value
         genre = ""  # Default value
-        return Track(title, artist, album, url, year, genre)
+        # Extract ISRC from external_ids
+        isrc = track["track"].get("external_ids", {}).get("isrc")
+        return Track(title, artist, album, url, year, genre, isrc)
     sp_playlist_tracks = await asyncio.to_thread(
         sp.user_playlist_tracks, user_id, playlist.id
     )
@@ -85,7 +87,9 @@ async def _get_sp_liked_tracks(sp: spotipy.Spotify) -> List[Track]:
         url = track["external_urls"].get("spotify", "")
         year = track["album"].get("release_date", "")[:4] if track["album"].get("release_date") else ""
         genre = ""
-        return Track(title, artist, album, url, year, genre)
+        # Extract ISRC from external_ids
+        isrc = track.get("external_ids", {}).get("isrc")
+        return Track(title, artist, album, url, year, genre, isrc)
     
     tracks: List[Track] = []
     try:

@@ -92,7 +92,9 @@ def extract_dz_track_metadata(track):
     year = track["album"].get("release_date", "").split("-")[0]  # Assuming the release_date is in YYYY-MM-DD format
     genre = track["album"].get("genre_id", "")
     url = track.get("link", "")
-    return Track(title, artist, album, url, year, genre)  # Assuming Track class is modified to include year and genre
+    # Extract ISRC - Deezer provides this at track level
+    isrc = track.get("isrc")
+    return Track(title, artist, album, url, year, genre, isrc)
 
 
 async def _get_dz_favorite_tracks(dz: deezer.Client, user_id: str) -> List[Track]:

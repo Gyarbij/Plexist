@@ -79,6 +79,12 @@ class PlexistSettings(BaseSettings):
     sync_liked_tracks: FlexibleBool = Field(
         default=False, validation_alias="SYNC_LIKED_TRACKS"
     )
+    
+    # Multi-service sync configuration
+    # Format: comma-separated pairs like "spotify:qobuz,tidal:plex"
+    sync_pairs: Optional[str] = Field(
+        default=None, validation_alias="SYNC_PAIRS"
+    )
 
     # Apple Music settings
     apple_music_team_id: Optional[str] = Field(
@@ -178,6 +184,7 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         max_requests_per_second=settings.max_requests_per_second,
         max_concurrent_requests=settings.max_concurrent_requests,
         sync_liked_tracks=settings.sync_liked_tracks,
+        sync_pairs=settings.sync_pairs,
         spotipy_client_id=settings.spotipy_client_id,
         spotipy_client_secret=settings.spotipy_client_secret,
         spotify_user_id=settings.spotify_user_id,

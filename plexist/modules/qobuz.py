@@ -303,6 +303,188 @@ class QobuzClient:
             offset += limit
         
         return tracks
+    
+    # ============================================================
+    # Write capability methods (for multi-service sync)
+    # ============================================================
+    
+    async def search_track_by_isrc(self, isrc: str) -> Optional[Dict[str, Any]]:
+        """Search for a track by ISRC code.
+        
+        Args:
+            isrc: International Standard Recording Code
+            
+        Returns:
+            Track data dict if found, None otherwise
+        """
+        try:
+            params = {"query": isrc, "limit": 1}
+            response = await self._request(
+                "track/search",
+                params=params,
+                require_auth=False,
+            )
+            tracks = response.get("tracks", {}).get("items", [])
+            if tracks and tracks[0].get("isrc") == isrc:
+                return tracks[0]
+            return None
+        except QobuzAPIError as e:
+            logging.debug("ISRC search failed for %s: %s", isrc, e)
+            return None
+    
+    async def search_track(
+        self, 
+        title: str, 
+        artist: str, 
+        album: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Search for a track by metadata.
+        
+        Args:
+            title: Track title
+            artist: Artist name
+            album: Album name (optional)
+            
+        Returns:
+            Best matching track data dict if found, None otherwise
+        """
+        try:
+            query = f"{title} {artist}"
+            if album:
+                query = f"{query} {album}"
+            
+            params = {"query": query, "limit": 10}
+            response = await self._request(
+                "track/search",
+                params=params,
+                require_auth=False,
+            )
+            
+            tracks = response.get("tracks", {}).get("items", [])
+            if not tracks:
+                return None
+            
+            # Simple scoring: prefer exact title+artist matches
+            title_lower = title.lower()
+            artist_lower = artist.lower()
+            
+            for track in tracks:
+                track_title = track.get("title", "").lower()
+                track_artist = track.get("performer", {}).get("name", "").lower()
+                if title_lower in track_title and artist_lower in track_artist:
+                    return track
+            
+            # Return first result as fallback
+            return tracks[0]
+            
+        except QobuzAPIError as e:
+            logging.debug("Track search failed for %s - %s: %s", title, artist, e)
+            return None
+    
+    async def create_playlist(
+        self, 
+        name: str, 
+        description: str = "",
+        is_public: bool = False
+    ) -> Optional[str]:
+        """Create a new playlist.
+        
+        Args:
+            name: Playlist name
+            description: Playlist description
+            is_public: Whether the playlist is public
+            
+        Returns:
+            Playlist ID if created successfully, None otherwise
+        """
+        try:
+            params = {
+                "name": name,
+                "description": description,
+                "is_public": "true" if is_public else "false",
+            }
+            response = await self._request(
+                "playlist/create",
+                params=params,
+                require_auth=True,
+            )
+            playlist_id = response.get("id")
+            if playlist_id:
+                logging.info("Created Qobuz playlist: %s (ID: %s)", name, playlist_id)
+                return str(playlist_id)
+            return None
+        except QobuzAPIError as e:
+            logging.error("Failed to create Qobuz playlist '%s': %s", name, e)
+            return None
+    
+    async def add_tracks_to_playlist(
+        self,
+        playlist_id: str,
+        track_ids: List[str]
+    ) -> int:
+        """Add tracks to an existing playlist.
+        
+        Args:
+            playlist_id: Qobuz playlist ID
+            track_ids: List of Qobuz track IDs to add
+            
+        Returns:
+            Number of tracks successfully added
+        """
+        if not track_ids:
+            return 0
+        
+        try:
+            # Qobuz API accepts comma-separated track IDs
+            params = {
+                "playlist_id": playlist_id,
+                "track_ids": ",".join(track_ids),
+            }
+            await self._request(
+                "playlist/addTracks",
+                params=params,
+                require_auth=True,
+            )
+            logging.info("Added %d tracks to Qobuz playlist %s", len(track_ids), playlist_id)
+            return len(track_ids)
+        except QobuzAPIError as e:
+            logging.error("Failed to add tracks to Qobuz playlist %s: %s", playlist_id, e)
+            return 0
+    
+    async def delete_playlist_tracks(self, playlist_id: str) -> bool:
+        """Remove all tracks from a playlist.
+        
+        Args:
+            playlist_id: Qobuz playlist ID
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # First get all track IDs in the playlist
+            tracks = await self.get_playlist_tracks(playlist_id)
+            if not tracks:
+                return True  # Already empty
+            
+            # Extract playlist track IDs (position-based for deletion)
+            track_ids = [str(t.get("id")) for t in tracks if t.get("id")]
+            if not track_ids:
+                return True
+            
+            params = {
+                "playlist_id": playlist_id,
+                "track_ids": ",".join(track_ids),
+            }
+            await self._request(
+                "playlist/deleteTracks",
+                params=params,
+                require_auth=True,
+            )
+            logging.info("Cleared %d tracks from Qobuz playlist %s", len(track_ids), playlist_id)
+            return True
+        except QobuzAPIError as e:
+            logging.error("Failed to clear Qobuz playlist %s: %s", playlist_id, e)
+            return False
 
 
 def _parse_playlist_ids(raw_ids: Optional[str]) -> List[str]:
@@ -341,6 +523,9 @@ def _extract_track_metadata(track_data: Dict[str, Any]) -> Track:
         if isinstance(genre_data, dict):
             genre = genre_data.get("name", "")
     
+    # Extract ISRC - Qobuz provides this at track level
+    isrc = track_data.get("isrc")
+    
     return Track(
         title=title,
         artist=artist,
@@ -348,6 +533,7 @@ def _extract_track_metadata(track_data: Dict[str, Any]) -> Track:
         url=url,
         year=year,
         genre=genre,
+        isrc=isrc,
     )
 
 
@@ -477,6 +663,8 @@ class QobuzProvider(MusicServiceProvider):
     """Qobuz provider for Plexist."""
     
     name = "qobuz"
+    supports_read = True
+    supports_write = True  # Qobuz API supports playlist creation and modification
     
     def is_configured(self, user_inputs: UserInputs) -> bool:
         """Check if Qobuz is properly configured.
@@ -609,5 +797,107 @@ class QobuzProvider(MusicServiceProvider):
             logging.error("Qobuz API error during sync: %s", e)
         except Exception as e:
             logging.error("Qobuz sync failed: %s", e)
+        finally:
+            await client.close()
+    
+    # ============================================================
+    # Write capability methods (for multi-service sync)
+    # ============================================================
+    
+    async def search_track(
+        self, 
+        track: Track, 
+        user_inputs: UserInputs
+    ) -> Optional[str]:
+        """Search for a track in Qobuz and return its ID.
+        
+        Uses ISRC for exact matching when available, falls back to metadata matching.
+        """
+        client = self._get_client(user_inputs)
+        try:
+            # First try ISRC-based search for exact match
+            if track.isrc:
+                result = await client.search_track_by_isrc(track.isrc)
+                if result:
+                    track_id = result.get("id")
+                    if track_id:
+                        logging.debug(
+                            "Found Qobuz track by ISRC %s: %s", 
+                            track.isrc, track_id
+                        )
+                        return str(track_id)
+            
+            # Fall back to metadata search
+            result = await client.search_track(
+                title=track.title,
+                artist=track.artist,
+                album=track.album if track.album else None,
+            )
+            if result:
+                track_id = result.get("id")
+                if track_id:
+                    logging.debug(
+                        "Found Qobuz track by metadata '%s' - '%s': %s",
+                        track.title, track.artist, track_id
+                    )
+                    return str(track_id)
+            
+            logging.debug(
+                "No Qobuz match found for '%s' by '%s'",
+                track.title, track.artist
+            )
+            return None
+        finally:
+            await client.close()
+    
+    async def create_playlist(
+        self, 
+        playlist: Playlist, 
+        user_inputs: UserInputs
+    ) -> str:
+        """Create a new playlist in Qobuz."""
+        client = self._get_client(user_inputs)
+        try:
+            if not await client.authenticate():
+                raise QobuzAuthError("Authentication required to create playlists")
+            
+            playlist_id = await client.create_playlist(
+                name=playlist.name,
+                description=playlist.description,
+            )
+            if not playlist_id:
+                raise QobuzAPIError(f"Failed to create playlist '{playlist.name}'")
+            return playlist_id
+        finally:
+            await client.close()
+    
+    async def add_tracks_to_playlist(
+        self,
+        playlist_id: str,
+        track_ids: List[str],
+        user_inputs: UserInputs
+    ) -> int:
+        """Add tracks to an existing Qobuz playlist."""
+        client = self._get_client(user_inputs)
+        try:
+            if not await client.authenticate():
+                raise QobuzAuthError("Authentication required to modify playlists")
+            
+            return await client.add_tracks_to_playlist(playlist_id, track_ids)
+        finally:
+            await client.close()
+    
+    async def clear_playlist(
+        self,
+        playlist_id: str,
+        user_inputs: UserInputs
+    ) -> bool:
+        """Remove all tracks from a Qobuz playlist."""
+        client = self._get_client(user_inputs)
+        try:
+            if not await client.authenticate():
+                raise QobuzAuthError("Authentication required to modify playlists")
+            
+            return await client.delete_playlist_tracks(playlist_id)
         finally:
             await client.close()

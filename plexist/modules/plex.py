@@ -5,7 +5,7 @@ import logging
 import os
 import pathlib
 from difflib import SequenceMatcher
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import aiosqlite
 import plexapi
@@ -15,6 +15,7 @@ from plexapi.server import PlexServer
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .helperClasses import Playlist, Track, UserInputs
+from .base import MusicServiceProvider, ServiceRegistry
 
 
 DB_PATH = os.getenv("DB_PATH", "plexist.db")
@@ -695,3 +696,305 @@ async def sync_liked_tracks_to_plex(
         "Liked tracks sync from %s complete: %d newly rated, %d unrated, %d failed",
         source, matched_count, unrated_count, failed_count
     )
+
+
+# ============================================================
+# Plex Provider (for multi-service sync support)
+# ============================================================
+
+@ServiceRegistry.register
+class PlexProvider(MusicServiceProvider):
+    """Plex provider for multi-service sync.
+    
+    Plex acts as both a source (reading playlists from your library)
+    and a destination (creating/updating playlists and matching tracks).
+    Supports ISRC-based track matching when available in file metadata.
+    """
+    
+    name = "plex"
+    supports_read = True
+    supports_write = True
+    
+    def is_configured(self, user_inputs: UserInputs) -> bool:
+        """Check if Plex is properly configured."""
+        return bool(user_inputs.plex_url and user_inputs.plex_token)
+    
+    def _get_server(self, user_inputs: UserInputs) -> PlexServer:
+        """Create a Plex server connection."""
+        return PlexServer(user_inputs.plex_url, user_inputs.plex_token)
+    
+    async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
+        """Fetch all playlists from Plex library."""
+        try:
+            plex = self._get_server(user_inputs)
+            await _acquire_rate_limit()
+            plex_playlists = await asyncio.to_thread(plex.playlists)
+            
+            playlists = []
+            for pl in plex_playlists:
+                # Only include music playlists
+                if pl.playlistType == "audio":
+                    poster = ""
+                    try:
+                        if hasattr(pl, "thumb") and pl.thumb:
+                            poster = plex.url(pl.thumb, includeToken=True)
+                    except Exception:
+                        pass
+                    
+                    playlists.append(Playlist(
+                        id=str(pl.ratingKey),
+                        name=pl.title,
+                        description=pl.summary or "",
+                        poster=poster,
+                    ))
+            
+            logging.info("Fetched %d playlists from Plex", len(playlists))
+            return playlists
+            
+        except Exception as e:
+            logging.error("Error fetching Plex playlists: %s", e)
+            return []
+    
+    async def get_tracks(
+        self,
+        playlist: Playlist,
+        user_inputs: UserInputs,
+    ) -> List[Track]:
+        """Fetch all tracks from a Plex playlist."""
+        try:
+            plex = self._get_server(user_inputs)
+            await _acquire_rate_limit()
+            plex_playlist = await asyncio.to_thread(plex.playlist, playlist.name)
+            
+            await _acquire_rate_limit()
+            items = await asyncio.to_thread(plex_playlist.items)
+            
+            tracks = []
+            for item in items:
+                if hasattr(item, "title"):
+                    # Try to extract ISRC from Plex metadata if available
+                    isrc = None
+                    try:
+                        # Plex stores ISRC in the guid or external IDs if available
+                        if hasattr(item, "guids"):
+                            for guid in item.guids:
+                                if guid.id and guid.id.startswith("isrc://"):
+                                    isrc = guid.id.replace("isrc://", "")
+                                    break
+                    except Exception:
+                        pass
+                    
+                    tracks.append(Track(
+                        title=item.title,
+                        artist=item.artist().title if hasattr(item, "artist") else "Unknown",
+                        album=item.album().title if hasattr(item, "album") else "Unknown",
+                        url="",
+                        year=str(item.year) if hasattr(item, "year") and item.year else "",
+                        genre=item.genres[0].tag if hasattr(item, "genres") and item.genres else "",
+                        isrc=isrc,
+                    ))
+            
+            logging.info(
+                "Fetched %d tracks from Plex playlist '%s'",
+                len(tracks), playlist.name
+            )
+            return tracks
+            
+        except NotFound:
+            logging.warning("Plex playlist not found: %s", playlist.name)
+            return []
+        except Exception as e:
+            logging.error("Error fetching tracks from Plex playlist %s: %s", playlist.name, e)
+            return []
+    
+    async def sync(self, plex: PlexServer, user_inputs: UserInputs) -> None:
+        """Legacy sync method - Plex doesn't sync to itself."""
+        logging.info("Plex provider sync() called - no action needed (Plex is typically a destination)")
+    
+    # ============================================================
+    # Write capability methods
+    # ============================================================
+    
+    async def search_track(
+        self, 
+        track: Track, 
+        user_inputs: UserInputs
+    ) -> Optional[str]:
+        """Search for a track in Plex library and return its ratingKey.
+        
+        Uses ISRC for exact matching when available in both source track
+        and Plex metadata, falls back to existing fuzzy matching logic.
+        """
+        plex = self._get_server(user_inputs)
+        
+        # First try ISRC-based matching if available
+        if track.isrc:
+            try:
+                await _acquire_rate_limit()
+                # Search by ISRC in Plex's external IDs
+                results = await asyncio.to_thread(
+                    plex.library.search,
+                    libtype="track",
+                    **{"track.guid": f"isrc://{track.isrc}"}
+                )
+                if results:
+                    logging.debug(
+                        "Found Plex track by ISRC %s: %s",
+                        track.isrc, results[0].ratingKey
+                    )
+                    return str(results[0].ratingKey)
+            except Exception as e:
+                logging.debug("ISRC search failed in Plex: %s", e)
+        
+        # Fall back to existing fuzzy matching
+        plex_track, _ = await _match_single_track(plex, track)
+        if plex_track:
+            return str(plex_track.ratingKey)
+        return None
+    
+    async def create_playlist(
+        self, 
+        playlist: Playlist, 
+        user_inputs: UserInputs
+    ) -> str:
+        """Create a new playlist in Plex.
+        
+        Note: Plex requires at least one item to create a playlist,
+        so this creates an empty placeholder that will be populated.
+        """
+        plex = self._get_server(user_inputs)
+        
+        try:
+            # Check if playlist already exists
+            await _acquire_rate_limit()
+            existing = await asyncio.to_thread(plex.playlist, playlist.name)
+            logging.info("Plex playlist '%s' already exists (ID: %s)", playlist.name, existing.ratingKey)
+            return str(existing.ratingKey)
+        except NotFound:
+            pass
+        
+        # Need at least one track to create a playlist in Plex
+        # We'll create it with the first track when add_tracks is called
+        # For now, return a placeholder that indicates creation is pending
+        logging.info("Plex playlist '%s' will be created when tracks are added", playlist.name)
+        return f"PENDING:{playlist.name}"
+    
+    async def add_tracks_to_playlist(
+        self,
+        playlist_id: str,
+        track_ids: List[str],
+        user_inputs: UserInputs
+    ) -> int:
+        """Add tracks to a Plex playlist."""
+        if not track_ids:
+            return 0
+        
+        plex = self._get_server(user_inputs)
+        
+        # Convert rating keys to track objects
+        tracks_to_add = []
+        for rating_key in track_ids:
+            try:
+                await _acquire_rate_limit()
+                track = await asyncio.to_thread(plex.fetchItem, int(rating_key))
+                tracks_to_add.append(track)
+            except Exception as e:
+                logging.warning("Could not fetch Plex track %s: %s", rating_key, e)
+        
+        if not tracks_to_add:
+            return 0
+        
+        try:
+            # Handle pending playlist creation
+            if playlist_id.startswith("PENDING:"):
+                playlist_name = playlist_id.replace("PENDING:", "")
+                await _acquire_rate_limit()
+                plex_playlist = await asyncio.to_thread(
+                    plex.createPlaylist,
+                    title=playlist_name,
+                    items=tracks_to_add
+                )
+                logging.info(
+                    "Created Plex playlist '%s' with %d tracks",
+                    playlist_name, len(tracks_to_add)
+                )
+                return len(tracks_to_add)
+            
+            # Add to existing playlist
+            await _acquire_rate_limit()
+            plex_playlist = await asyncio.to_thread(plex.playlist, playlist_id)
+            await _acquire_rate_limit()
+            await asyncio.to_thread(plex_playlist.addItems, tracks_to_add)
+            
+            logging.info(
+                "Added %d tracks to Plex playlist %s",
+                len(tracks_to_add), playlist_id
+            )
+            return len(tracks_to_add)
+            
+        except Exception as e:
+            logging.error("Failed to add tracks to Plex playlist %s: %s", playlist_id, e)
+            return 0
+    
+    async def clear_playlist(
+        self,
+        playlist_id: str,
+        user_inputs: UserInputs
+    ) -> bool:
+        """Remove all tracks from a Plex playlist."""
+        if playlist_id.startswith("PENDING:"):
+            return True  # Nothing to clear for pending playlists
+        
+        plex = self._get_server(user_inputs)
+        
+        try:
+            await _acquire_rate_limit()
+            plex_playlist = await asyncio.to_thread(plex.playlist, playlist_id)
+            
+            await _acquire_rate_limit()
+            items = await asyncio.to_thread(plex_playlist.items)
+            
+            if items:
+                await _acquire_rate_limit()
+                await asyncio.to_thread(plex_playlist.removeItems, items)
+                logging.info("Cleared %d tracks from Plex playlist %s", len(items), playlist_id)
+            
+            return True
+            
+        except NotFound:
+            logging.warning("Plex playlist not found: %s", playlist_id)
+            return False
+        except Exception as e:
+            logging.error("Failed to clear Plex playlist %s: %s", playlist_id, e)
+            return False
+    
+    async def get_playlist_by_name(
+        self,
+        name: str,
+        user_inputs: UserInputs
+    ) -> Optional[Playlist]:
+        """Find a Plex playlist by name."""
+        plex = self._get_server(user_inputs)
+        
+        try:
+            await _acquire_rate_limit()
+            plex_playlist = await asyncio.to_thread(plex.playlist, name)
+            
+            poster = ""
+            try:
+                if hasattr(plex_playlist, "thumb") and plex_playlist.thumb:
+                    poster = plex.url(plex_playlist.thumb, includeToken=True)
+            except Exception:
+                pass
+            
+            return Playlist(
+                id=str(plex_playlist.ratingKey),
+                name=plex_playlist.title,
+                description=plex_playlist.summary or "",
+                poster=poster,
+            )
+        except NotFound:
+            return None
+        except Exception as e:
+            logging.error("Error finding Plex playlist '%s': %s", name, e)
+            return None

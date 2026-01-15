@@ -16,9 +16,11 @@
 | Feature | Description |
 |---------|-------------|
 | **Playlist Sync** | Recreates your streaming playlists in Plex using files from your library |
+| **Multi-Service Sync** | Sync playlists between any services (e.g., Spotify → Qobuz, Tidal → Plex) |
 | **Auto Updates** | Keeps playlists in sync with your streaming services |
 | **New Playlists** | Automatically creates Plex playlists when added to your streaming service |
 | **Liked Tracks** | Syncs favorited tracks to Plex as 5-star ratings (appears in "Liked Tracks" smart playlist) |
+| **ISRC Matching** | Uses ISRC codes for accurate track matching across services |
 
 ### Supported Services
 
@@ -27,6 +29,47 @@
 - **Apple Music**
 - **Tidal**
 - **Qobuz**
+
+### Multi-Service Sync
+
+Sync playlists between any two services — not just to Plex! Configure source → destination pairs to sync playlists directly between streaming services.
+
+#### Supported Sync Directions
+
+| Service | Read (Source) | Write (Destination) |
+|---------|:-------------:|:-------------------:|
+| Spotify | ✅ | ❌ |
+| Deezer | ✅ | ❌ |
+| Apple Music | ✅ | ❌ |
+| Tidal | ✅ | ✅ |
+| Qobuz | ✅ | ✅ |
+| Plex | ✅ | ✅ |
+
+#### Configuration
+
+Set the `SYNC_PAIRS` environment variable with comma-separated `source:destination` pairs:
+
+```env
+# Sync Spotify playlists to Qobuz
+SYNC_PAIRS=spotify:qobuz
+
+# Sync Tidal playlists to Plex
+SYNC_PAIRS=tidal:plex
+
+# Multiple sync pairs
+SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
+```
+
+#### How It Works
+
+1. **Fetches playlists** from the source service
+2. **Matches tracks** in the destination using:
+   - **ISRC codes** (International Standard Recording Code) for exact matching
+   - **Metadata fallback** (title/artist/album) when ISRC unavailable
+3. **Creates or updates** playlists in the destination service
+4. **Reports results** including matched, missing, and failed tracks
+
+> **💡 Note:** When `SYNC_PAIRS` is configured, it replaces the default Plex-centric sync behavior. To sync to Plex, include it as a destination (e.g., `spotify:plex`).
 
 ## What it will NOT do:
 
@@ -245,6 +288,7 @@ All boolean options accept flexible values (case-insensitive):
 | `ADD_PLAYLIST_DESCRIPTION` | `yes` | Add description to playlists |
 | `APPEND_INSTEAD_OF_SYNC` | `no` | `no` = Full sync, `yes` = Append only (no removals) |
 | `SYNC_LIKED_TRACKS` | `no` | Sync liked tracks to Plex 5-star ratings |
+| `SYNC_PAIRS` | — | Multi-service sync pairs (e.g., `spotify:qobuz,tidal:plex`) |
 
 #### Output Options
 
@@ -370,6 +414,7 @@ services:
       ADD_PLAYLIST_DESCRIPTION: yes
       APPEND_INSTEAD_OF_SYNC: no
       SYNC_LIKED_TRACKS: no
+      # SYNC_PAIRS: spotify:qobuz,tidal:plex  # Multi-service sync (optional)
 
       # === Performance ===
       MAX_REQUESTS_PER_SECOND: 5

@@ -314,6 +314,9 @@ def _extract_track_metadata(track_data: dict) -> Track:
     # Genre
     genre = attributes.get("genreNames", [""])[0] if attributes.get("genreNames") else ""
     
+    # Extract ISRC - Apple Music provides this in attributes
+    isrc = attributes.get("isrc")
+    
     return Track(
         title=title,
         artist=artist,
@@ -321,6 +324,7 @@ def _extract_track_metadata(track_data: dict) -> Track:
         url=url,
         year=year,
         genre=genre,
+        isrc=isrc,
     )
 
 

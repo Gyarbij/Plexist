@@ -1,57 +1,48 @@
-**/__pycache__
-**/.venv
-**/.classpath
-**/.dockerignore
-**/.env
-**/.git
-**/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
-**/.vs
-**/.vscode
-**/*.*proj.user
-**/*.dbmdl
-**/*.jfm
-**/bin
-**/charts
-**/docker-compose*
-**/compose*
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
-**/secrets.dev.yaml
-**/values.dev.yaml
-README.md
-.DS_Store
-.github
+# ---- Git / VCS ----
+.git
 .gitignore
-.idea
-.jekyll-cache
-.jekyll-metadata
-.sass-cache
-tests
-_releaser
-_site
-CONTRIBUTING.md
-Dockerfile
-docker-compose.yml
-/vendor
+.github
 
-# General
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv
+.env
+dist/
+build/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Node / Frontend ----
+node_modules/
+npm-debug.log
+
+# ---- Docker / Compose ----
+docker-compose*
+compose*
+
+# ---- IDEs ----
+.vscode
+.idea
+.vs
+.project
+.classpath
+.settings
+*.proj.user
+
+# ---- OS / macOS ----
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Icon must end with two \r
 Icon
-
-
-# Thumbnails
 ._*
-
-# Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd
 .Spotlight-V100
@@ -59,10 +50,21 @@ Icon
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
-
-# Directories potentially created on remote AFP share
 .AppleDB
 .AppleDesktop
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# ---- Docs / meta ----
+README.md
+CONTRIBUTING.md
+_site
+.jekyll-cache
+.jekyll-metadata
+.sass-cache
+
+# ---- Other ----
+tests
+vendor
+*.log

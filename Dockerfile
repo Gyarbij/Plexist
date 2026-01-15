@@ -1,24 +1,38 @@
-FROM python:3.14.2-slim
+# ---------- builder ----------
+FROM python:3.14.2-slim AS builder
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-ENV PYTHONDONTWRITEBYTECODE=1
+WORKDIR /build
+COPY requirements.txt .
 
-ENV PYTHONUNBUFFERED=1
-
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libffi-dev \
-    build-essential \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libsqlite3-0 \
+      libgcc-s1 \
+      libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/python -m pip install --upgrade pip \
+ && /opt/venv/bin/pip install --no-cache-dir --only-binary=:all: --no-binary=pyaes,ratelimit,mpegdash -r requirements.txt
+
+# ---------- runtime ----------
+FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:/usr/local/bin:$PATH" \
+    LD_LIBRARY_PATH="/lib:/usr/lib:/usr/local/lib"
 
 WORKDIR /app
-COPY . /app
 
-RUN adduser -u 5678 --disabled-password --gecos "" plexist && chown -R plexist /app
-USER plexist
+COPY --from=builder /usr/local /usr/local
 
+COPY --from=builder /opt/venv /opt/venv
+COPY plexist /app/plexist
+
+COPY --from=builder /lib/ /lib/
+COPY --from=builder /usr/lib/ /usr/lib/
+
+USER 65532
 CMD ["python", "plexist/plexist.py"]
-
-# docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t gyarbij/plexist:<tag> --push .

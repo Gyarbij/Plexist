@@ -1,23 +1,83 @@
+# Plexist Docker Compose Configuration
+# See README.md for full documentation
+#
+# Images available from:
+#   - Docker Hub: gyarbij/plexist
+#   - GitHub Container Registry: ghcr.io/gyarbij/plexist
+
 services:
   plexist:
+    image: gyarbij/plexist:latest  # Or: ghcr.io/gyarbij/plexist:latest
     container_name: plexist
-    image: gyarbij/plexist:latest
-    environment:
-      - PLEX_URL=http://#.#.#.#:32400
-      - PLEX_TOKEN=<your plex token>
-      - WRITE_MISSING_AS_CSV=1
-      - WRITE_MISSING_AS_JSON=0
-      - ADD_PLAYLIST_POSTER=1
-      - ADD_PLAYLIST_DESCRIPTION=1
-      - APPEND_INSTEAD_OF_SYNC=0
-      - SECONDS_TO_WAIT=84000
-      - MAX_REQUESTS_PER_SECOND=5
-      - MAX_CONCURRENT_REQUESTS=4
-      - SPOTIFY_CLIENT_ID=<your spotify client id>
-      - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
-      - SPOTIFY_USER_ID=<your spotify user id>
-      - DEEZER_USER_ID=<deezer user id>
-      - DEEZER_PLAYLIST_ID=https://www.deezer.com/en/playlist/10484834882
-    volumes:
-      - <YOURPATH>:/app/data
     restart: unless-stopped
+
+    # Optional: load variables from an env file
+    # env_file:
+    #   - .env
+
+    environment:
+      # === Core Settings (Required) ===
+      PLEX_URL: http://192.168.0.2:32400
+      PLEX_TOKEN: your-plex-token
+      SECONDS_TO_WAIT: 84000
+      LOG_LEVEL: INFO
+      LOG_FORMAT: plain
+
+      # === Playlist Options ===
+      WRITE_MISSING_AS_CSV: no
+      WRITE_MISSING_AS_JSON: no
+      ADD_PLAYLIST_POSTER: yes
+      ADD_PLAYLIST_DESCRIPTION: yes
+      APPEND_INSTEAD_OF_SYNC: no
+      SYNC_LIKED_TRACKS: no
+
+      # === Performance Tuning ===
+      # Lower these values for slower servers (Synology, Raspberry Pi, etc.)
+      MAX_REQUESTS_PER_SECOND: 5
+      MAX_CONCURRENT_REQUESTS: 4
+
+      # === Spotify ===
+      # SPOTIFY_CLIENT_ID: your-client-id
+      # SPOTIFY_CLIENT_SECRET: your-client-secret
+      # SPOTIFY_USER_ID: your-user-id
+      # SPOTIFY_REDIRECT_URI: http://localhost:8888/callback  # For liked tracks
+      # SPOTIFY_CACHE_PATH: /app/data/.spotify_cache
+
+      # === Deezer ===
+      # DEEZER_USER_ID: your-user-id
+      # DEEZER_PLAYLIST_ID: playlist-id-1 playlist-id-2
+
+      # === Apple Music ===
+      # APPLE_MUSIC_TEAM_ID: your-team-id
+      # APPLE_MUSIC_KEY_ID: your-key-id
+      # APPLE_MUSIC_PRIVATE_KEY: /app/data/AuthKey.p8
+      # APPLE_MUSIC_USER_TOKEN: your-user-token
+      # APPLE_MUSIC_PUBLIC_PLAYLIST_IDS: pl.123 pl.456
+      # APPLE_MUSIC_STOREFRONT: us
+      # APPLE_MUSIC_DEVELOPER_TOKEN_TTL_SECONDS: 43200
+      # APPLE_MUSIC_REQUEST_TIMEOUT_SECONDS: 10
+      # APPLE_MUSIC_MAX_RETRIES: 3
+      # APPLE_MUSIC_RETRY_BACKOFF_SECONDS: 1.0
+
+      # === Tidal ===
+      # TIDAL_ACCESS_TOKEN: your-access-token
+      # TIDAL_REFRESH_TOKEN: your-refresh-token
+      # TIDAL_TOKEN_EXPIRY: 2026-12-31T23:59:59
+      # TIDAL_PUBLIC_PLAYLIST_IDS: uuid-1 uuid-2
+      # TIDAL_REQUEST_TIMEOUT_SECONDS: 10
+      # TIDAL_MAX_RETRIES: 3
+      # TIDAL_RETRY_BACKOFF_SECONDS: 1.0
+
+      # === Qobuz ===
+      # QOBUZ_APP_ID: your-app-id
+      # QOBUZ_APP_SECRET: your-app-secret
+      # QOBUZ_USERNAME: your-email
+      # QOBUZ_PASSWORD: your-password
+      # QOBUZ_USER_AUTH_TOKEN: your-auth-token
+      # QOBUZ_PUBLIC_PLAYLIST_IDS: 123456 789012
+      # QOBUZ_REQUEST_TIMEOUT_SECONDS: 10
+      # QOBUZ_MAX_RETRIES: 3
+      # QOBUZ_RETRY_BACKOFF_SECONDS: 1.0
+
+    volumes:
+      - ./data:/app/data  # For missing tracks, OAuth cache, and keys

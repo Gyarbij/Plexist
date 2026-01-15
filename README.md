@@ -1,7 +1,7 @@
 [![CodeQL](https://github.com/Gyarbij/Plexist/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/github-code-scanning/codeql) [![DockerHub](https://github.com/Gyarbij/Plexist/actions/workflows/image.yml/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/image.yml) [![Docker Dev Image CI](https://github.com/Gyarbij/Plexist/actions/workflows/dev-docker-image.yml/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/dev-docker-image.yml)
 
 # Plexist
-Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Deezer playlist in Plex (because Plex music playlist are a croc of tihs)
+Plex+Playlist=Plexist, An application for recreating and syncing Deezer, Apple Music, Spotify, Qobuz and Deezer playlist in Plex (because Plex music playlist are a croc of tihs)
 
 <p align="center">
   <img src="./assets/plexist.png" width="802" />
@@ -12,7 +12,7 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 * Recreates your streaming playlist within Plex, using files you already have in your library.
 * Keeps created playlist in sync with the streaming service.
 * Creates new playlist in Plex when they're added to your streaming service.
-* **Syncs liked/favorited tracks** from Spotify and Deezer to Plex by rating them 5 stars (appears in Plex's "Liked Tracks" smart playlist).
+* **Syncs liked/favorited tracks** from Deezer, Apple Music, Spotify, Qobuz and Deezer to Plex by rating them 5 stars (appears in Plex's "Liked Tracks" smart playlist).
 
 ## What it will NOT do:
 

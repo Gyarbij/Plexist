@@ -87,6 +87,10 @@ async def test_service_registry_sync_all_runs_only_configured(monkeypatch):
         spotify_user_id=None,
         deezer_user_id=None,
         deezer_playlist_ids=None,
+        apple_music_team_id=None,
+        apple_music_key_id=None,
+        apple_music_private_key=None,
+        apple_music_user_token=None,
     )
 
     await base.ServiceRegistry.sync_all(None, dummy_inputs)

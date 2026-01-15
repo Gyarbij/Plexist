@@ -23,6 +23,11 @@ def test_settings_from_environment(monkeypatch):
     monkeypatch.setenv("SPOTIFY_USER_ID", "spuser")
     monkeypatch.setenv("DEEZER_USER_ID", "dzuser")
     monkeypatch.setenv("DEEZER_PLAYLIST_ID", "1 2 3")
+    # Apple Music settings
+    monkeypatch.setenv("APPLE_MUSIC_TEAM_ID", "TEAM123456")
+    monkeypatch.setenv("APPLE_MUSIC_KEY_ID", "KEY789")
+    monkeypatch.setenv("APPLE_MUSIC_PRIVATE_KEY", "/path/to/AuthKey.p8")
+    monkeypatch.setenv("APPLE_MUSIC_USER_TOKEN", "user-token-abc")
 
     settings = PlexistSettings()
     user_inputs = build_user_inputs(settings)
@@ -43,3 +48,8 @@ def test_settings_from_environment(monkeypatch):
     assert user_inputs.spotify_user_id == "spuser"
     assert user_inputs.deezer_user_id == "dzuser"
     assert user_inputs.deezer_playlist_ids == "1 2 3"
+    # Apple Music assertions
+    assert user_inputs.apple_music_team_id == "TEAM123456"
+    assert user_inputs.apple_music_key_id == "KEY789"
+    assert user_inputs.apple_music_private_key == "/path/to/AuthKey.p8"
+    assert user_inputs.apple_music_user_token == "user-token-abc"

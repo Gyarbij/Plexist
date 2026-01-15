@@ -45,3 +45,9 @@ class UserInputs:
 
     deezer_user_id: Optional[str]
     deezer_playlist_ids: Optional[str]
+
+    # Apple Music settings
+    apple_music_team_id: Optional[str]
+    apple_music_key_id: Optional[str]
+    apple_music_private_key: Optional[str]
+    apple_music_user_token: Optional[str]

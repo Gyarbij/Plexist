@@ -10,3 +10,6 @@ pydantic-settings
 pydantic
 pydantic-core
 aiolimiter
+aiohttp
+PyJWT
+cryptography

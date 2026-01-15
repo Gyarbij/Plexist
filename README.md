@@ -53,6 +53,43 @@ OR
 * Get playlists IDs of playlists you want to sync
   *  Example: https://www.deezer.com/en/playlist/10484834882 - 10484834882 is the playlist ID
 
+### Apple Music
+Apple Music integration requires a few more steps to set up authentication:
+
+#### Prerequisites
+1. An [Apple Developer Account](https://developer.apple.com/) ($99/year)
+2. A MusicKit key from the Apple Developer Portal
+
+#### Getting Your MusicKit Credentials
+
+1. Go to [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/authkeys/list)
+2. Click the "+" button to create a new key
+3. Name your key (e.g., "Plexist MusicKit") and enable **MusicKit**
+4. Download the `.p8` private key file (you can only download it once!)
+5. Note your **Key ID** (shown after creating the key)
+6. Note your **Team ID** (visible in the top right of the developer portal or in Membership details)
+
+#### Getting Your Music User Token
+The Music User Token is required to access your personal library and playlists. You can obtain it using:
+
+**Option 1: MusicKit on the Web (Recommended)**
+Use the [Apple Music Token Generator](https://nicknisi.github.io/musickit-token/) or create a simple web page with MusicKit JS to authorize and get your token.
+
+**Option 2: Native iOS/macOS App**
+If you have development experience, you can use MusicKit in a native app to get the user token.
+
+#### Environment Variables
+```
+APPLE_MUSIC_TEAM_ID=YOUR_TEAM_ID
+APPLE_MUSIC_KEY_ID=YOUR_KEY_ID
+APPLE_MUSIC_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nYOUR_KEY_CONTENT\n-----END PRIVATE KEY-----
+APPLE_MUSIC_USER_TOKEN=YOUR_MUSIC_USER_TOKEN
+```
+
+**Note:** The private key can be provided as:
+- The full key content (with `\n` for newlines)
+- A file path starting with `/` (e.g., `/app/data/AuthKey.p8`)
+
 ## Installation
 
 The below will only run once unless you create a cronjob, etc. Docker is the recommended deployment method.
@@ -110,6 +147,10 @@ docker run -d \
   -e SPOTIFY_CACHE_PATH=/app/data/.spotify_cache  # Path to cache OAuth tokens
   -e DEEZER_USER_ID=                    # Deezer ID to sync (Sync's all playlist)
   -e DEEZER_PLAYLIST_ID=                # Deezer playlist IDs (space-separated)
+  -e APPLE_MUSIC_TEAM_ID=               # Apple Developer Team ID
+  -e APPLE_MUSIC_KEY_ID=                # MusicKit Key ID
+  -e APPLE_MUSIC_PRIVATE_KEY=           # MusicKit private key content or file path
+  -e APPLE_MUSIC_USER_TOKEN=            # Music User Token for library access
   -v /path/to/data:/app/data            # Mount for missing tracks files and OAuth cache
   gyarbij/plexist:latest
 
@@ -161,8 +202,12 @@ services:
       - SPOTIFY_CACHE_PATH=/app/data/.spotify_cache  # OAuth token cache path
       - DEEZER_USER_ID=          # your deezer user id
       - DEEZER_PLAYLIST_ID=      # deezer playlist ids space separated (numbers only)
+      - APPLE_MUSIC_TEAM_ID=     # Apple Developer Team ID
+      - APPLE_MUSIC_KEY_ID=      # MusicKit Key ID  
+      - APPLE_MUSIC_PRIVATE_KEY= # MusicKit private key content or /app/data/AuthKey.p8
+      - APPLE_MUSIC_USER_TOKEN=  # Music User Token for library access
     volumes:
-      - /path/to/data:/app/data  # For missing tracks and OAuth cache
+      - /path/to/data:/app/data  # For missing tracks, OAuth cache, and Apple Music key
     restart: unless-stopped
 
 ```

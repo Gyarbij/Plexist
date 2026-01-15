@@ -58,6 +58,20 @@ class PlexistSettings(BaseSettings):
         default=False, validation_alias="SYNC_LIKED_TRACKS"
     )
 
+    # Apple Music settings
+    apple_music_team_id: Optional[str] = Field(
+        default=None, validation_alias="APPLE_MUSIC_TEAM_ID"
+    )
+    apple_music_key_id: Optional[str] = Field(
+        default=None, validation_alias="APPLE_MUSIC_KEY_ID"
+    )
+    apple_music_private_key: Optional[str] = Field(
+        default=None, validation_alias="APPLE_MUSIC_PRIVATE_KEY"
+    )
+    apple_music_user_token: Optional[str] = Field(
+        default=None, validation_alias="APPLE_MUSIC_USER_TOKEN"
+    )
+
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
     return UserInputs(
@@ -77,4 +91,8 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         spotify_user_id=settings.spotify_user_id,
         deezer_user_id=settings.deezer_user_id,
         deezer_playlist_ids=settings.deezer_playlist_ids,
+        apple_music_team_id=settings.apple_music_team_id,
+        apple_music_key_id=settings.apple_music_key_id,
+        apple_music_private_key=settings.apple_music_private_key,
+        apple_music_user_token=settings.apple_music_user_token,
     )

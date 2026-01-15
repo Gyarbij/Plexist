@@ -17,6 +17,7 @@ from modules.plex import initialize_db, initialize_cache, configure_rate_limitin
 # Provider registrations (import for side-effects)
 from modules import spotify  # noqa: F401
 from modules import deezer  # noqa: F401
+from modules import apple_music  # noqa: F401
 
 def setup_logging() -> None:
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()

@@ -1,7 +1,7 @@
 [![CodeQL](https://github.com/Gyarbij/Plexist/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/github-code-scanning/codeql) [![DockerHub](https://github.com/Gyarbij/Plexist/actions/workflows/image.yml/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/image.yml) [![Docker Dev Image CI](https://github.com/Gyarbij/Plexist/actions/workflows/dev-docker-image.yml/badge.svg)](https://github.com/Gyarbij/Plexist/actions/workflows/dev-docker-image.yml)
 
 # Plexist
-Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Deezer playlist in Plex (because Plex music playlist are a croc of tihs)
+Plex+Playlist=Plexist, An application for recreating and syncing Spotify, Deezer, Tidal, and Qobuz playlists in Plex (because Plex music playlist are a croc of tihs)
 
 <p align="center">
   <img src="./assets/plexist.png" width="802" />
@@ -36,6 +36,25 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 OR
 * Get playlists IDs of playlists you want to sync
   *  Example: https://www.deezer.com/en/playlist/10484834882 - 10484834882 is the playlist ID
+
+### Tidal
+* Tidal username and password for authentication
+* Tidal user ID (optional) - To sync all playlists from a specific user
+  * Login to tidal.com
+  * Click on your profile
+  * Grab the user ID from the URL
+  * Example: https://listen.tidal.com/user/######## - ######## is the user ID
+OR
+* Get playlist IDs of playlists you want to sync
+  * Example: https://listen.tidal.com/playlist/######## - ######## is the playlist ID
+
+### Qobuz
+* Qobuz APP_ID - Required for API access (contact Qobuz or use existing APP_ID)
+* Qobuz username and password (optional) - For authenticated access
+* Qobuz user ID (optional) - To sync all playlists from a specific user
+OR
+* Get playlist IDs of playlists you want to sync
+  * Example: https://play.qobuz.com/playlist/######## - ######## is the playlist ID
 
 ## Installation
 
@@ -74,7 +93,16 @@ docker run -d \
   -e SPOTIFY_CLIENT_SECRET=             # Your Spotify client secret
   -e SPOTIFY_USER_ID=                   # Spotify ID to sync (Sync's all playlist)
   -e DEEZER_USER_ID=                    # Deezer ID to sync (Sync's all playlist)
-  -e DEEZER_PLAYLIST_ID=                # Individual playlist
+  -e DEEZER_PLAYLIST_ID=                # Individual playlist IDs (space separated)
+  -e TIDAL_USERNAME=                    # Your Tidal username
+  -e TIDAL_PASSWORD=                    # Your Tidal password
+  -e TIDAL_USER_ID=                     # Tidal user ID to sync (optional)
+  -e TIDAL_PLAYLIST_ID=                 # Individual Tidal playlist IDs (space separated)
+  -e QOBUZ_APP_ID=                      # Your Qobuz APP_ID
+  -e QOBUZ_USERNAME=                    # Your Qobuz username (optional)
+  -e QOBUZ_PASSWORD=                    # Your Qobuz password (optional)
+  -e QOBUZ_USER_ID=                     # Qobuz user ID to sync (optional)
+  -e QOBUZ_PLAYLIST_ID=                 # Individual Qobuz playlist IDs (space separated)
   gyarbij/plexist:latest
 
 ```
@@ -94,7 +122,7 @@ This will significantly reduce the load on your Plex server at the cost of sligh
 
 ### Docker Compose
 
-docker-compose.yml should be configured per the below, if you don't user Spotify you can remove the Spotify variables and vice versa for Deezer. 
+docker-compose.yml should be configured per the below, if you don't use Spotify you can remove the Spotify variables and vice versa for Deezer, Tidal, and Qobuz. 
 
 A template is Here: [docker-compose.yml](https://github.com/gyarbij/plexist/blob/main/assets/compose.yaml)
 
@@ -120,6 +148,15 @@ services:
       - SPOTIFY_USER_ID=         # your spotify user id
       - DEEZER_USER_ID=          # your deezer user id
       - DEEZER_PLAYLIST_ID=      # deezer playlist ids space separated
+      - TIDAL_USERNAME=          # your tidal username
+      - TIDAL_PASSWORD=          # your tidal password
+      - TIDAL_USER_ID=           # your tidal user id (optional)
+      - TIDAL_PLAYLIST_ID=       # tidal playlist ids space separated
+      - QOBUZ_APP_ID=            # your qobuz app id
+      - QOBUZ_USERNAME=          # your qobuz username (optional)
+      - QOBUZ_PASSWORD=          # your qobuz password (optional)
+      - QOBUZ_USER_ID=           # your qobuz user id (optional)
+      - QOBUZ_PLAYLIST_ID=       # qobuz playlist ids space separated
     restart: unless-stopped
 
 ```

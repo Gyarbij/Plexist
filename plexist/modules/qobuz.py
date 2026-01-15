@@ -175,8 +175,12 @@ class QobuzClient:
             return False
         
         try:
-            # Hash the password with MD5 (Qobuz API requirement)
-            password_hash = hashlib.md5(self.password.encode()).hexdigest()
+            # Qobuz API requires MD5-hashed password - this is their API design,
+            # not a security choice we control. The hash is sent over HTTPS.
+            # nosec B324 - MD5 required by external API, not used for security
+            password_hash = hashlib.md5(  # noqa: S324
+                self.password.encode(), usedforsecurity=False
+            ).hexdigest()
             
             params = {
                 "username": self.username,

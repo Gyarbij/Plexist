@@ -1,11 +1,10 @@
-FROM python:3.14.2-slim
+FROM python:3.14.2 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
 ENV PYTHONUNBUFFERED=1
 
-# Allow PyO3-based deps (pydantic-core) to build on Python 3.14
-ENV PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+# Allow pre-release wheels for Python 3.14
 ENV PIP_PRE=1
 
 RUN apt-get update && apt-get install -y \
@@ -15,10 +14,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --only-binary=:all: -r requirements.txt --prefix=/install
+
+FROM python:3.14.2-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY --from=builder /install /usr/local
 
 WORKDIR /app
-COPY . /app
+COPY plexist /app/plexist
+COPY example.env /app/example.env
 
 RUN adduser -u 5678 --disabled-password --gecos "" plexist && chown -R plexist /app
 USER plexist

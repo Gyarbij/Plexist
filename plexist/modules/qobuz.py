@@ -67,7 +67,7 @@ def _get_qobuz_playlists(
     if all_qobuz_playlists:
         for playlist_data in all_qobuz_playlists:
             images = playlist_data.get("images300", [])
-            poster = images[0] if images and len(images) > 0 else ""
+            poster = images[0] if images else ""
             
             playlists.append(
                 Playlist(
@@ -105,10 +105,11 @@ def _get_qobuz_tracks_from_playlist(
 
 
 def extract_qobuz_track_metadata(track):
-    """Extract track metadata from Qobuz track object.
+    """Extract track metadata from Qobuz track.
 
     Args:
-        track: Qobuz track object or dict
+        track: Qobuz track, can be either a dict (from API responses) or 
+               a Track object (from library classes)
 
     Returns:
         Track: Track object with metadata

@@ -54,6 +54,9 @@ class PlexistSettings(BaseSettings):
     deezer_playlist_ids: Optional[str] = Field(
         default=None, validation_alias="DEEZER_PLAYLIST_ID"
     )
+    sync_liked_tracks: bool = Field(
+        default=False, validation_alias="SYNC_LIKED_TRACKS"
+    )
 
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
@@ -68,6 +71,7 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         wait_seconds=settings.wait_seconds,
         max_requests_per_second=settings.max_requests_per_second,
         max_concurrent_requests=settings.max_concurrent_requests,
+        sync_liked_tracks=settings.sync_liked_tracks,
         spotipy_client_id=settings.spotipy_client_id,
         spotipy_client_secret=settings.spotipy_client_secret,
         spotify_user_id=settings.spotify_user_id,

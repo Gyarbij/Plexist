@@ -36,6 +36,9 @@ class UserInputs:
     max_requests_per_second: float
     max_concurrent_requests: int
 
+    # Liked/Favorited tracks sync
+    sync_liked_tracks: bool
+
     spotipy_client_id: Optional[str]
     spotipy_client_secret: Optional[str]
     spotify_user_id: Optional[str]

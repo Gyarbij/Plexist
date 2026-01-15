@@ -81,6 +81,7 @@ async def test_service_registry_sync_all_runs_only_configured(monkeypatch):
         wait_seconds=1,
         max_requests_per_second=1.0,
         max_concurrent_requests=1,
+        sync_liked_tracks=False,
         spotipy_client_id=None,
         spotipy_client_secret=None,
         spotify_user_id=None,

@@ -18,9 +18,14 @@ services:
       - MAX_CONCURRENT_REQUESTS=4
       - LOG_LEVEL=INFO
       - LOG_FORMAT=plain
+      # Liked/Favorited tracks sync (rates matched tracks 5 stars in Plex)
+      - SYNC_LIKED_TRACKS=0
       - SPOTIFY_CLIENT_ID=<your spotify client id>
       - SPOTIFY_CLIENT_SECRET=<your spotify client secret>
       - SPOTIFY_USER_ID=<your spotify user id>
+      # Required for Spotify liked tracks sync (OAuth)
+      - SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
+      - SPOTIFY_CACHE_PATH=/app/data/.spotify_cache
       - DEEZER_USER_ID=<deezer user id>
       - DEEZER_PLAYLIST_ID=10484834882
     volumes:

@@ -12,6 +12,7 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 * Recreates your streaming playlist within Plex, using files you already have in your library.
 * Keeps created playlist in sync with the streaming service.
 * Creates new playlist in Plex when they're added to your streaming service.
+* **Syncs liked/favorited tracks** from Spotify and Deezer to Plex by rating them 5 stars (appears in Plex's "Liked Tracks" smart playlist).
 
 ## What it will NOT do:
 
@@ -26,6 +27,21 @@ Plex+Playlist=Plexist, An application for recreating and syncing Spotify and Dee
 ### Spotify
 * Spotify client ID and client secret - Can be obtained from [Spotify developer](https://developer.spotify.com/dashboard/login)
 * Spotify user ID - This can be found on  your [Spotify account page](https://www.spotify.com/nl/account/overview/)
+
+#### Spotify Liked Tracks Sync (Optional)
+To sync your Spotify liked/saved tracks to Plex ratings, you need to set up OAuth authentication:
+
+1. Go to your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Select your app and click "Edit Settings"
+3. Add a Redirect URI (e.g., `http://localhost:8888/callback`)
+4. Set the `SPOTIFY_REDIRECT_URI` environment variable to match
+5. On first run, you'll need to authorize the app (check container logs for the authorization URL)
+6. The OAuth token is cached in `.spotify_cache` (mount this as a volume to persist across restarts)
+
+Required environment variables for liked tracks sync:
+- `SYNC_LIKED_TRACKS=1`
+- `SPOTIFY_REDIRECT_URI=http://localhost:8888/callback`
+- `SPOTIFY_CACHE_PATH=/app/data/.spotify_cache` (optional, for persistent OAuth tokens)
 
 ### Deezer
 * Deezer profile ID of the account to fetch the playlist
@@ -86,11 +102,15 @@ docker run -d \
   -e MAX_CONCURRENT_REQUESTS=4          # Max concurrent Plex requests (Default 4, lower to reduce CPU load)
   -e LOG_LEVEL=INFO                      # Logging level (DEBUG, INFO, WARNING, ERROR)
   -e LOG_FORMAT=plain                    # plain or json
+  -e SYNC_LIKED_TRACKS=0                 # <1 or 0>, Default 0, 1 = Sync liked/favorited tracks to Plex ratings
   -e SPOTIFY_CLIENT_ID=                 # Your Spotify Client/App ID
   -e SPOTIFY_CLIENT_SECRET=             # Your Spotify client secret
   -e SPOTIFY_USER_ID=                   # Spotify ID to sync (Sync's all playlist)
+  -e SPOTIFY_REDIRECT_URI=              # Required for liked tracks sync (e.g., http://localhost:8888/callback)
+  -e SPOTIFY_CACHE_PATH=/app/data/.spotify_cache  # Path to cache OAuth tokens
   -e DEEZER_USER_ID=                    # Deezer ID to sync (Sync's all playlist)
   -e DEEZER_PLAYLIST_ID=                # Deezer playlist IDs (space-separated)
+  -v /path/to/data:/app/data            # Mount for missing tracks files and OAuth cache
   gyarbij/plexist:latest
 
 ```
@@ -133,11 +153,16 @@ services:
       - MAX_CONCURRENT_REQUESTS=4  # Max concurrent Plex requests (Default 4)
       - LOG_LEVEL=INFO             # Logging level (DEBUG, INFO, WARNING, ERROR)
       - LOG_FORMAT=plain           # plain or json
+      - SYNC_LIKED_TRACKS=0        # <1 or 0>, Default 0, 1 = Sync liked tracks to Plex ratings
       - SPOTIFY_CLIENT_ID=       # your spotify client id
       - SPOTIFY_CLIENT_SECRET=   # your spotify client secret
       - SPOTIFY_USER_ID=         # your spotify user id
+      - SPOTIFY_REDIRECT_URI=    # Required for liked tracks (e.g., http://localhost:8888/callback)
+      - SPOTIFY_CACHE_PATH=/app/data/.spotify_cache  # OAuth token cache path
       - DEEZER_USER_ID=          # your deezer user id
       - DEEZER_PLAYLIST_ID=      # deezer playlist ids space separated (numbers only)
+    volumes:
+      - /path/to/data:/app/data  # For missing tracks and OAuth cache
     restart: unless-stopped
 
 ```

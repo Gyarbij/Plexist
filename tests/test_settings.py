@@ -17,6 +17,7 @@ def test_settings_from_environment(monkeypatch):
     monkeypatch.setenv("SECONDS_TO_WAIT", "120")
     monkeypatch.setenv("MAX_REQUESTS_PER_SECOND", "7.5")
     monkeypatch.setenv("MAX_CONCURRENT_REQUESTS", "3")
+    monkeypatch.setenv("SYNC_LIKED_TRACKS", "1")
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "spid")
     monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "spsecret")
     monkeypatch.setenv("SPOTIFY_USER_ID", "spuser")
@@ -36,6 +37,7 @@ def test_settings_from_environment(monkeypatch):
     assert user_inputs.wait_seconds == 120
     assert user_inputs.max_requests_per_second == 7.5
     assert user_inputs.max_concurrent_requests == 3
+    assert user_inputs.sync_liked_tracks is True
     assert user_inputs.spotipy_client_id == "spid"
     assert user_inputs.spotipy_client_secret == "spsecret"
     assert user_inputs.spotify_user_id == "spuser"

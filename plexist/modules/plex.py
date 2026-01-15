@@ -73,6 +73,18 @@ async def initialize_db() -> None:
             )
             """
         )
+        # Table to track liked/favorited tracks synced from external services
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS liked_tracks (
+                plex_id INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                track_key TEXT NOT NULL,
+                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (plex_id, source)
+            )
+            """
+        )
         await conn.commit()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -509,3 +521,175 @@ async def clear_cache() -> None:
         await conn.commit()
 
     logging.info("Cache cleared")
+
+
+# ============================================================
+# Liked Tracks / Rating Sync Functions
+# ============================================================
+
+async def rate_plex_track(
+    plex: PlexServer,
+    plex_track: plexapi.audio.Track,
+    rating: float
+) -> bool:
+    """Rate a Plex track. Rating is on 0-10 scale (10 = 5 stars, 0 = unrated).
+    
+    Args:
+        plex: PlexServer instance
+        plex_track: The Plex track to rate
+        rating: Rating value (0-10, where 10 = 5 stars)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        await _acquire_rate_limit()
+        # Fetch the full track object if we only have a cache stub
+        if plex_track._server is None:
+            full_track = await asyncio.to_thread(
+                plex.fetchItem, plex_track.ratingKey
+            )
+        else:
+            full_track = plex_track
+        
+        await asyncio.to_thread(full_track.rate, rating)
+        logging.debug(
+            "Rated track '%s' by '%s' with %.1f stars",
+            full_track.title,
+            full_track.artist().title if hasattr(full_track, 'artist') else 'Unknown',
+            rating / 2
+        )
+        return True
+    except Exception as e:
+        logging.error("Failed to rate track %s: %s", plex_track.ratingKey, e)
+        return False
+
+
+async def get_previously_synced_liked_tracks(source: str) -> set:
+    """Get set of Plex IDs that were previously synced as liked from a source."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        async with conn.execute(
+            "SELECT plex_id FROM liked_tracks WHERE source = ?",
+            (source,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return {row[0] for row in rows}
+
+
+async def save_synced_liked_track(plex_id: int, source: str, track_key: str) -> None:
+    """Record that a track was synced as liked from a source."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """
+            INSERT OR REPLACE INTO liked_tracks (plex_id, source, track_key)
+            VALUES (?, ?, ?)
+            """,
+            (plex_id, source, track_key)
+        )
+        await conn.commit()
+
+
+async def remove_synced_liked_track(plex_id: int, source: str) -> None:
+    """Remove a track from the synced liked tracks table."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "DELETE FROM liked_tracks WHERE plex_id = ? AND source = ?",
+            (plex_id, source)
+        )
+        await conn.commit()
+
+
+async def sync_liked_tracks_to_plex(
+    plex: PlexServer,
+    liked_tracks: List[Track],
+    source: str,
+    user_inputs: UserInputs
+) -> None:
+    """Sync liked/favorited tracks from an external service to Plex ratings.
+    
+    This function performs a bidirectional sync:
+    1. Matches liked tracks to Plex library and rates them 5 stars (10.0)
+    2. Removes 5-star rating from tracks that are no longer liked in the source
+    
+    Args:
+        plex: PlexServer instance
+        liked_tracks: List of Track objects from the external service
+        source: Source identifier (e.g., 'spotify', 'deezer')
+        user_inputs: User configuration inputs
+    """
+    if not liked_tracks:
+        logging.info("No liked tracks to sync from %s", source)
+        return
+    
+    logging.info("Syncing %d liked tracks from %s to Plex ratings", len(liked_tracks), source)
+    
+    # Get previously synced tracks for this source
+    previously_synced = await get_previously_synced_liked_tracks(source)
+    logging.debug("Found %d previously synced liked tracks from %s", len(previously_synced), source)
+    
+    # Match and rate tracks
+    current_liked_plex_ids = set()
+    matched_count = 0
+    failed_count = 0
+    
+    semaphore = asyncio.Semaphore(max_concurrent_workers)
+    
+    async def process_track(track: Track):
+        nonlocal matched_count, failed_count
+        async with semaphore:
+            plex_track, missing = await _match_single_track(plex, track)
+            if plex_track:
+                plex_id = plex_track.ratingKey
+                current_liked_plex_ids.add(plex_id)
+                
+                # Only rate if not already synced (avoid redundant API calls)
+                if plex_id not in previously_synced:
+                    success = await rate_plex_track(plex, plex_track, 10.0)  # 10.0 = 5 stars
+                    if success:
+                        track_key = f"{track.title}|{track.artist}|{track.album}"
+                        await save_synced_liked_track(plex_id, source, track_key)
+                        matched_count += 1
+                        logging.info(
+                            "Rated '%s' by '%s' as liked (5 stars)",
+                            track.title, track.artist
+                        )
+                    else:
+                        failed_count += 1
+                else:
+                    logging.debug("Track '%s' already synced, skipping", track.title)
+            else:
+                logging.debug("No Plex match for liked track '%s' by '%s'", track.title, track.artist)
+    
+    # Process all tracks concurrently with semaphore limiting
+    await asyncio.gather(*(process_track(track) for track in liked_tracks))
+    
+    # Remove ratings from tracks that are no longer liked
+    tracks_to_unrate = previously_synced - current_liked_plex_ids
+    unrated_count = 0
+    
+    for plex_id in tracks_to_unrate:
+        try:
+            await _acquire_rate_limit()
+            plex_track = await asyncio.to_thread(plex.fetchItem, plex_id)
+            # Set rating to 0 (unrated)
+            success = await rate_plex_track(plex, plex_track, 0.0)
+            if success:
+                await remove_synced_liked_track(plex_id, source)
+                unrated_count += 1
+                logging.info(
+                    "Removed rating from '%s' by '%s' (no longer liked in %s)",
+                    plex_track.title,
+                    plex_track.artist().title if hasattr(plex_track, 'artist') else 'Unknown',
+                    source
+                )
+        except NotFound:
+            # Track no longer exists in Plex, just remove from our tracking
+            await remove_synced_liked_track(plex_id, source)
+            logging.debug("Track %d no longer in Plex, removed from tracking", plex_id)
+        except Exception as e:
+            logging.error("Failed to unrate track %d: %s", plex_id, e)
+    
+    logging.info(
+        "Liked tracks sync from %s complete: %d newly rated, %d unrated, %d failed",
+        source, matched_count, unrated_count, failed_count
+    )

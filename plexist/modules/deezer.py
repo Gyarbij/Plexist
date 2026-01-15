@@ -7,7 +7,7 @@ from plexapi.server import PlexServer
 
 from .base import ServiceRegistry, MusicServiceProvider
 from .helperClasses import Playlist, Track, UserInputs
-from .plex import update_or_create_plex_playlist
+from .plex import update_or_create_plex_playlist, sync_liked_tracks_to_plex
 
 
 async def _get_dz_playlists(
@@ -95,6 +95,29 @@ def extract_dz_track_metadata(track):
     return Track(title, artist, album, url, year, genre)  # Assuming Track class is modified to include year and genre
 
 
+async def _get_dz_favorite_tracks(dz: deezer.Client, user_id: str) -> List[Track]:
+    """Fetch all favorite/loved tracks from Deezer user's library.
+    
+    Args:
+        dz: Deezer client
+        user_id: Deezer user ID
+        
+    Returns:
+        List of Track objects representing the user's favorite tracks
+    """
+    tracks: List[Track] = []
+    try:
+        user = await asyncio.to_thread(dz.get_user, user_id)
+        # get_tracks() returns user's favorite/loved tracks
+        dz_tracks = await asyncio.to_thread(user.get_tracks)
+        tracks = [extract_dz_track_metadata(track) for track in dz_tracks]
+        logging.info("Fetched %d favorite tracks from Deezer", len(tracks))
+    except Exception as e:
+        logging.error("Failed to fetch favorite tracks from Deezer: %s", e)
+    
+    return tracks
+
+
 
 @ServiceRegistry.register
 class DeezerProvider(MusicServiceProvider):
@@ -113,6 +136,14 @@ class DeezerProvider(MusicServiceProvider):
         dz = deezer.Client()
         return await _get_dz_tracks_from_playlist(dz, playlist)
 
+    async def get_liked_tracks(self, user_inputs: UserInputs) -> List[Track]:
+        """Fetch user's favorite/loved tracks from Deezer library."""
+        if not user_inputs.deezer_user_id:
+            logging.warning("Deezer user ID not set, cannot fetch favorite tracks")
+            return []
+        dz = deezer.Client()
+        return await _get_dz_favorite_tracks(dz, user_inputs.deezer_user_id)
+
     async def sync(self, plex: PlexServer, user_inputs: UserInputs) -> None:
         dz = deezer.Client()
         playlists = await _get_dz_playlists(dz, user_inputs)
@@ -124,3 +155,12 @@ class DeezerProvider(MusicServiceProvider):
                 )
         else:
             logging.error("No deezer playlists found for given user")
+        
+        # Sync favorite tracks if enabled
+        if user_inputs.sync_liked_tracks and user_inputs.deezer_user_id:
+            logging.info("Syncing Deezer favorite tracks to Plex ratings")
+            liked_tracks = await self.get_liked_tracks(user_inputs)
+            if liked_tracks:
+                await sync_liked_tracks_to_plex(plex, liked_tracks, "deezer", user_inputs)
+            else:
+                logging.warning("No favorite tracks found or unable to fetch from Deezer")

@@ -41,3 +41,14 @@ class UserInputs:
 
     deezer_user_id: str
     deezer_playlist_ids: str
+
+    tidal_username: str
+    tidal_password: str
+    tidal_user_id: str
+    tidal_playlist_ids: str
+
+    qobuz_app_id: str
+    qobuz_username: str
+    qobuz_password: str
+    qobuz_user_id: str
+    qobuz_playlist_ids: str

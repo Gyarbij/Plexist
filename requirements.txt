@@ -22,19 +22,39 @@ idna==3.11
     #   anyio
     #   httpx
     #   requests
+isodate==0.7.2
+    # via tidalapi
+mpegdash==0.4.0
+    # via tidalapi
 plexapi==4.17.2
     # via -r requirements.in
+pyaes==1.6.1
+    # via tidalapi
+python-dateutil==2.9.0.post0
+    # via tidalapi
+qobuz==0.0.2
+    # via -r requirements.in
+ratelimit==2.2.1
+    # via tidalapi
 redis==7.1.0
     # via spotipy
 requests==2.32.5
     # via
     #   -r requirements.in
     #   plexapi
+    #   qobuz
     #   spotipy
+    #   tidalapi
+six==1.17.0
+    # via python-dateutil
 spotipy==2.25.2
     # via -r requirements.in
 tenacity==9.1.2
     # via -r requirements.in
+tidalapi==0.8.10
+    # via -r requirements.in
+typing-extensions==4.15.0
+    # via tidalapi
 urllib3==2.6.3
     # via
     #   -r requirements.in

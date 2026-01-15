@@ -28,10 +28,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       -
-        name: Build and push
+        name: Build and push (amd64, arm64)
         uses: docker/build-push-action@v4
         with:
           context: .
-          platforms: linux/amd64,linux/arm64/v8,linux/arm/v7
+          platforms: linux/amd64,linux/arm64/v8
+          push: true
+          tags: gyarbij/plexist:latest
+      -
+        name: Build and push (arm/v7)
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: Dockerfile.armv7
+          platforms: linux/arm/v7
           push: true
           tags: gyarbij/plexist:latest

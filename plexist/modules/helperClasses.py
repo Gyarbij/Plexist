@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -10,6 +10,7 @@ class Track:
     url: str
     year: str  
     genre: str
+    isrc: Optional[str] = None  # International Standard Recording Code for accurate matching
 
 
 @dataclass
@@ -38,6 +39,11 @@ class UserInputs:
 
     # Liked/Favorited tracks sync
     sync_liked_tracks: bool = False
+    
+    # Multi-service sync configuration
+    # Format: comma-separated pairs like "spotify:qobuz,tidal:plex"
+    # Each pair defines source:destination for playlist sync
+    sync_pairs: Optional[str] = None
 
     spotipy_client_id: Optional[str] = None
     spotipy_client_secret: Optional[str] = None

@@ -72,6 +72,9 @@ def _extract_track_metadata(track: Any) -> Track:
     # Genre - Tidal doesn't always expose genre at track level
     genre = ""
     
+    # Extract ISRC - Tidal provides this on track objects
+    isrc = getattr(track, "isrc", None)
+    
     return Track(
         title=title,
         artist=artist,
@@ -79,6 +82,7 @@ def _extract_track_metadata(track: Any) -> Track:
         url=url,
         year=year,
         genre=genre,
+        isrc=isrc,
     )
 
 
@@ -405,6 +409,8 @@ class TidalProvider(MusicServiceProvider):
     """Tidal provider for Plexist."""
     
     name = "tidal"
+    supports_read = True
+    supports_write = True  # Tidal API supports playlist creation and modification
     
     def is_configured(self, user_inputs: UserInputs) -> bool:
         """Check if Tidal is properly configured.
@@ -567,3 +573,252 @@ class TidalProvider(MusicServiceProvider):
             logging.error("Tidal API error during sync: %s", e)
         except Exception as e:
             logging.error("Tidal sync failed: %s", e)
+    
+    # ============================================================
+    # Write capability methods (for multi-service sync)
+    # ============================================================
+    
+    async def search_track(
+        self, 
+        track: Track, 
+        user_inputs: UserInputs
+    ) -> Optional[str]:
+        """Search for a track in Tidal and return its ID.
+        
+        Uses ISRC for exact matching when available, falls back to metadata matching.
+        """
+        session = await _create_authenticated_session(user_inputs)
+        if not session:
+            session = await _create_public_session()
+        
+        timeout_seconds = user_inputs.tidal_request_timeout_seconds or 10
+        max_retries = user_inputs.tidal_max_retries or 3
+        retry_backoff = user_inputs.tidal_retry_backoff_seconds or 1.0
+        
+        try:
+            # First try ISRC-based search for exact match
+            if track.isrc:
+                try:
+                    result = await _with_retries(
+                        lambda: asyncio.to_thread(
+                            session.search, track.isrc, models=[tidalapi.Track], limit=1  # type: ignore[attr-defined]
+                        ),
+                        timeout_seconds,
+                        max_retries,
+                        retry_backoff,
+                        "search by ISRC",
+                    )
+                    if result and result.get("tracks"):
+                        tidal_track = result["tracks"][0]
+                        # Verify ISRC matches
+                        if getattr(tidal_track, "isrc", None) == track.isrc:
+                            logging.debug(
+                                "Found Tidal track by ISRC %s: %s",
+                                track.isrc, tidal_track.id
+                            )
+                            return str(tidal_track.id)
+                except Exception as e:
+                    logging.debug("ISRC search failed for %s: %s", track.isrc, e)
+            
+            # Fall back to metadata search
+            query = f"{track.title} {track.artist}"
+            result = await _with_retries(
+                lambda: asyncio.to_thread(
+                    session.search, query, models=[tidalapi.Track], limit=10  # type: ignore[attr-defined]
+                ),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "search by metadata",
+            )
+            
+            if result and result.get("tracks"):
+                # Score matches by similarity
+                title_lower = track.title.lower()
+                artist_lower = track.artist.lower()
+                
+                for tidal_track in result["tracks"]:
+                    track_title = (tidal_track.name or "").lower()
+                    track_artist = ""
+                    if hasattr(tidal_track, "artist") and tidal_track.artist:
+                        track_artist = (tidal_track.artist.name or "").lower()
+                    
+                    if title_lower in track_title and artist_lower in track_artist:
+                        logging.debug(
+                            "Found Tidal track by metadata '%s' - '%s': %s",
+                            track.title, track.artist, tidal_track.id
+                        )
+                        return str(tidal_track.id)
+                
+                # Return first result as fallback
+                first_track = result["tracks"][0]
+                logging.debug(
+                    "Found Tidal track (best match) for '%s' - '%s': %s",
+                    track.title, track.artist, first_track.id
+                )
+                return str(first_track.id)
+            
+            logging.debug(
+                "No Tidal match found for '%s' by '%s'",
+                track.title, track.artist
+            )
+            return None
+            
+        except Exception as e:
+            logging.error("Tidal track search failed: %s", e)
+            return None
+    
+    async def create_playlist(
+        self, 
+        playlist: Playlist, 
+        user_inputs: UserInputs
+    ) -> str:
+        """Create a new playlist in Tidal."""
+        session = await _create_authenticated_session(user_inputs)
+        if not session:
+            raise TidalAuthError("Authentication required to create playlists")
+        
+        timeout_seconds = user_inputs.tidal_request_timeout_seconds or 10
+        max_retries = user_inputs.tidal_max_retries or 3
+        retry_backoff = user_inputs.tidal_retry_backoff_seconds or 1.0
+        
+        try:
+            user = await _with_retries(
+                lambda: asyncio.to_thread(lambda: session.user),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "get user",
+            )
+            
+            new_playlist = await _with_retries(
+                lambda: asyncio.to_thread(
+                    user.create_playlist,
+                    playlist.name,
+                    playlist.description or "",
+                ),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "create playlist",
+            )
+            
+            if new_playlist and new_playlist.id:
+                logging.info(
+                    "Created Tidal playlist: %s (ID: %s)",
+                    playlist.name, new_playlist.id
+                )
+                return str(new_playlist.id)
+            
+            raise TidalAPIError(f"Failed to create playlist '{playlist.name}'")
+            
+        except Exception as e:
+            logging.error("Failed to create Tidal playlist '%s': %s", playlist.name, e)
+            raise TidalAPIError(f"Failed to create playlist: {e}")
+    
+    async def add_tracks_to_playlist(
+        self,
+        playlist_id: str,
+        track_ids: List[str],
+        user_inputs: UserInputs
+    ) -> int:
+        """Add tracks to an existing Tidal playlist."""
+        if not track_ids:
+            return 0
+        
+        session = await _create_authenticated_session(user_inputs)
+        if not session:
+            raise TidalAuthError("Authentication required to modify playlists")
+        
+        timeout_seconds = user_inputs.tidal_request_timeout_seconds or 10
+        max_retries = user_inputs.tidal_max_retries or 3
+        retry_backoff = user_inputs.tidal_retry_backoff_seconds or 1.0
+        
+        try:
+            tidal_playlist = await _with_retries(
+                lambda: asyncio.to_thread(session.playlist, playlist_id),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "get playlist",
+            )
+            
+            if not tidal_playlist:
+                raise TidalAPIError(f"Playlist {playlist_id} not found")
+            
+            # Tidal API accepts track IDs as integers
+            int_track_ids = [int(tid) for tid in track_ids]
+            
+            await _with_retries(
+                lambda: asyncio.to_thread(tidal_playlist.add, int_track_ids),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "add tracks to playlist",
+            )
+            
+            logging.info(
+                "Added %d tracks to Tidal playlist %s",
+                len(track_ids), playlist_id
+            )
+            return len(track_ids)
+            
+        except Exception as e:
+            logging.error("Failed to add tracks to Tidal playlist %s: %s", playlist_id, e)
+            return 0
+    
+    async def clear_playlist(
+        self,
+        playlist_id: str,
+        user_inputs: UserInputs
+    ) -> bool:
+        """Remove all tracks from a Tidal playlist."""
+        session = await _create_authenticated_session(user_inputs)
+        if not session:
+            raise TidalAuthError("Authentication required to modify playlists")
+        
+        timeout_seconds = user_inputs.tidal_request_timeout_seconds or 10
+        max_retries = user_inputs.tidal_max_retries or 3
+        retry_backoff = user_inputs.tidal_retry_backoff_seconds or 1.0
+        
+        try:
+            tidal_playlist = await _with_retries(
+                lambda: asyncio.to_thread(session.playlist, playlist_id),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "get playlist",
+            )
+            
+            if not tidal_playlist:
+                return False
+            
+            # Get current tracks
+            tracks = await _with_retries(
+                lambda: asyncio.to_thread(tidal_playlist.tracks),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "get playlist tracks",
+            )
+            
+            if not tracks:
+                return True  # Already empty
+            
+            # Remove tracks by index (TIDAL uses indices for removal)
+            indices = list(range(len(tracks)))
+            
+            await _with_retries(
+                lambda: asyncio.to_thread(tidal_playlist.remove_by_indices, indices),
+                timeout_seconds,
+                max_retries,
+                retry_backoff,
+                "remove tracks from playlist",
+            )
+            
+            logging.info("Cleared %d tracks from Tidal playlist %s", len(tracks), playlist_id)
+            return True
+            
+        except Exception as e:
+            logging.error("Failed to clear Tidal playlist %s: %s", playlist_id, e)
+            return False

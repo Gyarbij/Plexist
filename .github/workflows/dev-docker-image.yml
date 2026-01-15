@@ -5,6 +5,10 @@ on:
     branches:
       - 'dev'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   docker:
     runs-on: ubuntu-latest

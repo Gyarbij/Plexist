@@ -20,7 +20,7 @@
 | **Auto Updates** | Keeps playlists in sync with your streaming services |
 | **New Playlists** | Automatically creates Plex playlists when added to your streaming service |
 | **Liked Tracks** | Syncs favorited tracks to Plex as 5-star ratings (appears in "Liked Tracks" smart playlist) |
-| **ISRC Matching** | Uses ISRC codes for accurate track matching across services |
+| **ISRC Matching** | Uses ISRC codes for accurate track matching (falls back to fuzzy matching) |
 
 ### Supported Services
 

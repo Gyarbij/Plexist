@@ -207,6 +207,27 @@ async def _match_single_track(plex: PlexServer, track: Track):
     def similarity(a, b):
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
+    # Stage 0: ISRC-based exact match (highest priority)
+    if track.isrc:
+        try:
+            await _acquire_rate_limit()
+            # Search for track by ISRC in Plex's external IDs/guids
+            results = await asyncio.to_thread(
+                plex.library.search,
+                libtype="track",
+                **{"track.guid": f"isrc://{track.isrc}"}
+            )
+            if results:
+                logging.info(
+                    "ISRC match found for '%s' by '%s' (ISRC: %s)",
+                    track.title,
+                    track.artist,
+                    track.isrc,
+                )
+                return results[0], None
+        except Exception as e:
+            logging.debug("ISRC search failed for %s: %s", track.isrc, e)
+
     async def search_and_score(query, threshold):
         best_match = None
         best_score = 0

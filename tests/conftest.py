@@ -22,3 +22,29 @@ def reset_service_registry():
 def add_plexist_to_path():
     yield
     sys.path.remove(str(plexist_path))
+
+
+@pytest.fixture(autouse=True)
+async def close_musicbrainz_session():
+    yield
+    try:
+        import modules.musicbrainz as musicbrainz
+        await musicbrainz.close_http_session()
+    except Exception:
+        pass
+
+
+def pytest_sessionfinish(session, exitstatus):
+    try:
+        import asyncio
+        import modules.musicbrainz as musicbrainz
+        try:
+            asyncio.run(musicbrainz.close_http_session())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(musicbrainz.close_http_session())
+            finally:
+                loop.close()
+    except Exception:
+        pass

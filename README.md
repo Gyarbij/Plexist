@@ -304,6 +304,7 @@ All boolean options accept flexible values (case-insensitive):
 |----------|---------|-------------|
 | `PLEX_URL` | — | **Required.** Your Plex server URL (include `http://` or `https://`) |
 | `PLEX_TOKEN` | — | **Required.** Your Plex authentication token |
+| `DB_PATH` | `/app/data/plexist.db` | SQLite database path (mount `/app/data`) |
 | `SECONDS_TO_WAIT` | `84000` | Seconds between sync cycles |
 | `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `LOG_FORMAT` | `plain` | Log format (`plain` or `json`) |
@@ -344,6 +345,7 @@ docker run -d \
   --restart unless-stopped \
   -e PLEX_URL=http://192.168.0.2:32400 \
   -e PLEX_TOKEN=your-plex-token \
+  -e DB_PATH=/app/data/plexist.db \
   -e SECONDS_TO_WAIT=84000 \
   -e LOG_LEVEL=INFO \
   -e LOG_FORMAT=plain \
@@ -371,6 +373,7 @@ docker run -d \
   # === Core Settings ===
   -e PLEX_URL=http://192.168.0.2:32400 \
   -e PLEX_TOKEN=your-plex-token \
+  -e DB_PATH=/app/data/plexist.db \
   -e SECONDS_TO_WAIT=84000 \
   -e LOG_LEVEL=INFO \
   -e LOG_FORMAT=plain \
@@ -431,6 +434,7 @@ services:
       # === Core Settings ===
       PLEX_URL: http://192.168.0.2:32400
       PLEX_TOKEN: your-plex-token
+      DB_PATH: /app/data/plexist.db
       SECONDS_TO_WAIT: 84000
       LOG_LEVEL: INFO
       LOG_FORMAT: plain

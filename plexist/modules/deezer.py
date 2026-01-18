@@ -94,7 +94,9 @@ def extract_dz_track_metadata(track):
     url = track.get("link", "")
     # Extract ISRC - Deezer provides this at track level
     isrc = track.get("isrc")
-    return Track(title, artist, album, url, year, genre, isrc)
+    duration_seconds = track.get("duration")
+    duration_ms = int(duration_seconds * 1000) if duration_seconds else None
+    return Track(title, artist, album, url, year, genre, isrc, duration_ms)
 
 
 async def _get_dz_favorite_tracks(dz: deezer.Client, user_id: str) -> List[Track]:

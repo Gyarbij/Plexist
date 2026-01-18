@@ -74,6 +74,8 @@ def _extract_track_metadata(track: Any) -> Track:
     
     # Extract ISRC - Tidal provides this on track objects
     isrc = getattr(track, "isrc", None)
+    duration_seconds = getattr(track, "duration", None)
+    duration_ms = int(duration_seconds * 1000) if duration_seconds else None
     
     return Track(
         title=title,
@@ -83,6 +85,7 @@ def _extract_track_metadata(track: Any) -> Track:
         year=year,
         genre=genre,
         isrc=isrc,
+        duration_ms=duration_ms,
     )
 
 

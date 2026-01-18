@@ -11,6 +11,7 @@ class Track:
     year: str  
     genre: str
     isrc: Optional[str] = None  # International Standard Recording Code for accurate matching
+    duration_ms: Optional[int] = None  # Track duration in milliseconds
 
 
 @dataclass
@@ -36,6 +37,10 @@ class UserInputs:
     # Rate limiting settings
     max_requests_per_second: float = 5.0
     max_concurrent_requests: int = 4
+
+    # Plex cache optimization settings
+    plex_extended_cache_enabled: bool = True
+    plex_duration_bucket_seconds: int = 5
 
     # Liked/Favorited tracks sync
     sync_liked_tracks: bool = False

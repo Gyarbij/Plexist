@@ -60,6 +60,13 @@ class PlexistSettings(BaseSettings):
         default=4, validation_alias="MAX_CONCURRENT_REQUESTS"
     )
 
+    plex_extended_cache_enabled: FlexibleBool = Field(
+        default=True, validation_alias="PLEX_EXTENDED_CACHE_ENABLED"
+    )
+    plex_duration_bucket_seconds: int = Field(
+        default=5, validation_alias="PLEX_DURATION_BUCKET_SECONDS"
+    )
+
     spotipy_client_id: Optional[str] = Field(
         default=None, validation_alias="SPOTIFY_CLIENT_ID"
     )
@@ -197,6 +204,8 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         wait_seconds=settings.wait_seconds,
         max_requests_per_second=settings.max_requests_per_second,
         max_concurrent_requests=settings.max_concurrent_requests,
+        plex_extended_cache_enabled=settings.plex_extended_cache_enabled,
+        plex_duration_bucket_seconds=settings.plex_duration_bucket_seconds,
         sync_liked_tracks=settings.sync_liked_tracks,
         sync_pairs=settings.sync_pairs,
         spotipy_client_id=settings.spotipy_client_id,

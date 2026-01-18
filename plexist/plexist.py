@@ -91,8 +91,8 @@ async def main():
             return
         
         if plex:
-            # Initialize the cache for Plex track matching
-            await initialize_cache(plex)
+            # Initialize the cache for Plex track matching (with MusicBrainz settings)
+            await initialize_cache(plex, user_inputs)
 
     while True:
         logging.info("Starting playlist sync")

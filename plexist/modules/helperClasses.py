@@ -84,3 +84,8 @@ class UserInputs:
     qobuz_request_timeout_seconds: Optional[int] = 10
     qobuz_max_retries: Optional[int] = 3
     qobuz_retry_backoff_seconds: Optional[float] = 1.0
+
+    # MusicBrainz ISRC resolution settings
+    musicbrainz_enabled: bool = True
+    musicbrainz_cache_ttl_days: int = 90
+    musicbrainz_negative_cache_ttl_days: int = 7

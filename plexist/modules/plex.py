@@ -16,6 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .helperClasses import Playlist, Track, UserInputs
 from .base import MusicServiceProvider, ServiceRegistry
+from . import musicbrainz
 
 
 DB_PATH = os.getenv("DB_PATH", "plexist.db")
@@ -31,9 +32,17 @@ max_concurrent_workers = 4  # Default, will be updated from UserInputs
 # Global cache for Plex tracks
 plex_tracks_cache: Dict[str, plexapi.audio.Track] = {}
 plex_tracks_cache_index: Dict[str, plexapi.audio.Track] = {}
+
+# In-memory MBID index: maps MusicBrainz ID -> Plex track info
+# Loaded from DB at startup, updated incrementally when new tracks are cached
+plex_mbid_index: Dict[str, dict] = {}  # mbid -> {"plex_id": int, "track_key": str, "track": Track}
+
 cache_lock = asyncio.Lock()
 cache_building = False
 cache_building_lock = asyncio.Lock()
+
+# MusicBrainz integration flag (set from UserInputs)
+musicbrainz_enabled = True
 
 
 async def _acquire_rate_limit() -> None:
@@ -72,10 +81,17 @@ async def initialize_db() -> None:
                 album TEXT,
                 year INTEGER,
                 genre TEXT,
-                plex_id INTEGER
+                plex_id INTEGER,
+                mbid TEXT
             )
             """
         )
+        # Add mbid column if it doesn't exist (migration for existing databases)
+        try:
+            await conn.execute("ALTER TABLE plex_cache ADD COLUMN mbid TEXT")
+        except Exception:
+            pass  # Column already exists
+        
         # Table to track liked/favorited tracks synced from external services
         await conn.execute(
             """
@@ -89,6 +105,9 @@ async def initialize_db() -> None:
             """
         )
         await conn.commit()
+    
+    # Initialize MusicBrainz cache tables
+    await musicbrainz.initialize_musicbrainz_db()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def fetch_plex_tracks(
@@ -100,7 +119,7 @@ async def fetch_plex_tracks(
     )
 
 async def fetch_and_cache_tracks(plex: PlexServer) -> None:
-    global plex_tracks_cache, cache_building
+    global plex_tracks_cache, plex_mbid_index, cache_building
     async with cache_building_lock:
         if cache_building:
             return
@@ -116,16 +135,37 @@ async def fetch_and_cache_tracks(plex: PlexServer) -> None:
                 if not tracks:
                     break
                 new_items: Dict[str, plexapi.audio.Track] = {}
+                mbid_entries = []  # For bulk MBID index update
+                
                 async with cache_lock:
                     for track in tracks:
                         key = f"{track.title}|{track.artist().title}|{track.album().title}"
                         plex_tracks_cache[key] = track
                         new_items[key] = track
+                        
+                        # Extract MusicBrainz IDs from track.guids if present
+                        mbids = _extract_mbids_from_track(track)
+                        for mbid in mbids:
+                            plex_mbid_index[mbid] = {
+                                "plex_id": track.ratingKey,
+                                "track_key": key,
+                                "track": track,
+                            }
+                            mbid_entries.append((mbid, track.ratingKey, key))
+                    
                     _rebuild_cache_index()
+                
                 offset += limit
                 await _update_db_cache_bulk(new_items)
+                
+                # Bulk save MBID index to database
+                if mbid_entries:
+                    await musicbrainz.save_plex_mbids_bulk(mbid_entries)
+                
                 logging.info(
-                    "Fetched and cached %s tracks so far...", len(plex_tracks_cache)
+                    "Fetched and cached %s tracks so far (%s with MBIDs)...", 
+                    len(plex_tracks_cache),
+                    len(plex_mbid_index)
                 )
                 await asyncio.sleep(0.5)
             except Exception as e:
@@ -136,16 +176,47 @@ async def fetch_and_cache_tracks(plex: PlexServer) -> None:
         async with cache_building_lock:
             cache_building = False
         logging.info(
-            "Finished fetching all tracks. Total tracks in cache: %s",
+            "Finished fetching all tracks. Total: %s, with MBIDs: %s",
             len(plex_tracks_cache),
+            len(plex_mbid_index),
         )
+
+
+def _normalize_mbid(mbid: Optional[str]) -> Optional[str]:
+    if not mbid:
+        return None
+    normalized = mbid.strip().lower()
+    if normalized.startswith("mbid://"):
+        normalized = normalized.split("mbid://", 1)[1]
+    normalized = normalized.strip("{} ")
+    return normalized or None
+
+
+def _extract_mbids_from_track(track: plexapi.audio.Track) -> List[str]:
+    """
+    Extract MusicBrainz IDs from a Plex track's guids.
+    
+    Plex stores MBIDs in the format: mbid://62a4c2b3-9acd-4c92-b199-94204a942308
+    """
+    mbids = []
+    if not hasattr(track, "guids") or not track.guids:
+        return mbids
+    
+    for guid in track.guids:
+        guid_id = guid.id if hasattr(guid, "id") else str(guid)
+        if "mbid://" in guid_id:
+            normalized = _normalize_mbid(guid_id)
+            if normalized:
+                mbids.append(normalized)
+    
+    return list(dict.fromkeys(mbids))
 
 async def _update_db_cache_bulk(tracks_cache: Dict[str, plexapi.audio.Track]) -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.executemany(
             """
-            INSERT OR REPLACE INTO plex_cache (key, title, artist, album, year, genre, plex_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO plex_cache (key, title, artist, album, year, genre, plex_id, mbid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -156,23 +227,43 @@ async def _update_db_cache_bulk(tracks_cache: Dict[str, plexapi.audio.Track]) ->
                     track.year,
                     ",".join(g.tag for g in track.genres) if track.genres else "",
                     track.ratingKey,
+                    _get_primary_mbid(track),
                 )
                 for key, track in tracks_cache.items()
             ],
         )
         await conn.commit()
 
+
+def _get_primary_mbid(track: plexapi.audio.Track) -> Optional[str]:
+    mbids = _extract_mbids_from_track(track)
+    if not mbids:
+        return None
+    return sorted(mbids)[0]
+
 async def load_cache_from_db() -> None:
-    global plex_tracks_cache
+    """Load both track cache and MBID index from the database."""
+    global plex_tracks_cache, plex_mbid_index
+    
     async with aiosqlite.connect(DB_PATH) as conn:
-        async with conn.execute(
-            "SELECT key, title, artist, album, year, genre, plex_id FROM plex_cache"
-        ) as cursor:
-            rows = await cursor.fetchall()
+        # Load track cache (include mbid column if it exists)
+        try:
+            async with conn.execute(
+                "SELECT key, title, artist, album, year, genre, plex_id, mbid FROM plex_cache"
+            ) as cursor:
+                rows = await cursor.fetchall()
+        except Exception:
+            # Fallback for old schema without mbid column
+            async with conn.execute(
+                "SELECT key, title, artist, album, year, genre, plex_id FROM plex_cache"
+            ) as cursor:
+                rows = [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], None) for r in await cursor.fetchall()]
 
     async with cache_lock:
-        plex_tracks_cache = {
-            row[0]: plexapi.audio.Track(
+        plex_tracks_cache = {}
+        for row in rows:
+            key = row[0]
+            track = plexapi.audio.Track(
                 None,
                 {
                     "title": row[1],
@@ -183,11 +274,39 @@ async def load_cache_from_db() -> None:
                     "ratingKey": row[6],
                 },
             )
-            for row in rows
-        }
+            plex_tracks_cache[key] = track
+            
+            # Also populate in-memory MBID index from DB
+            mbid = row[7] if len(row) > 7 else None
+            mbid = _normalize_mbid(mbid) if mbid else None
+            if mbid:
+                plex_mbid_index[mbid] = {
+                    "plex_id": row[6],
+                    "track_key": key,
+                    "track": track,
+                }
+        
         _rebuild_cache_index()
 
-    logging.info("Loaded %s tracks from the database cache", len(plex_tracks_cache))
+    # Also load from dedicated MBID index table (may have entries not in plex_cache)
+    db_mbid_index = await musicbrainz.load_plex_mbid_index()
+    for mbid, info in db_mbid_index.items():
+        normalized_mbid = _normalize_mbid(mbid)
+        if not normalized_mbid:
+            continue
+        if normalized_mbid not in plex_mbid_index:
+            # Track not in memory cache, store minimal info
+            plex_mbid_index[normalized_mbid] = {
+                "plex_id": info["plex_id"],
+                "track_key": info["track_key"],
+                "track": None,  # Will need to fetch from Plex if needed
+            }
+
+    logging.info(
+        "Loaded %s tracks from cache, %s MBID index entries",
+        len(plex_tracks_cache),
+        len(plex_mbid_index)
+    )
 
 async def _get_available_plex_tracks(
     plex: PlexServer, tracks: List[Track]
@@ -227,6 +346,16 @@ async def _match_single_track(plex: PlexServer, track: Track):
                 return results[0], None
         except Exception as e:
             logging.debug("ISRC search failed for %s: %s", track.isrc, e)
+
+    # Stage 0.5: MusicBrainz MBID proxy match (ISRC -> MBID -> Plex)
+    # This resolves ISRCs via MusicBrainz to find matching MBIDs in our Plex library
+    if track.isrc and musicbrainz_enabled:
+        try:
+            matched = await _match_via_mbid_proxy(plex, track)
+            if matched:
+                return matched, None
+        except Exception as e:
+            logging.debug("MBID proxy match failed for %s: %s", track.isrc, e)
 
     async def search_and_score(query, threshold):
         best_match = None
@@ -373,8 +502,119 @@ async def _match_single_track(plex: PlexServer, track: Track):
     logging.info("No match found for track %s by %s.", track.title, track.artist)
     return None, track
 
-async def initialize_cache(plex: PlexServer) -> None:
+
+async def _match_via_mbid_proxy(plex: PlexServer, track: Track) -> Optional[plexapi.audio.Track]:
+    """
+    Attempt to match a track via MusicBrainz MBID proxy.
+    
+    Flow:
+    1. Look up the track's ISRC in MusicBrainz to get associated MBIDs
+    2. Check if any of those MBIDs exist in our Plex MBID index
+    3. If found, return the matching Plex track (O(1) lookup)
+    
+    This reduces load on Plex's SQLite database by doing lookups in-memory.
+    """
+    if not track.isrc:
+        return None
+    
+    # Get MBIDs for this ISRC (uses cache, falls back to MusicBrainz API)
+    candidate_mbids = await musicbrainz.get_mbids_for_isrc(track.isrc)
+    
+    if not candidate_mbids:
+        logging.debug(f"No MBIDs found for ISRC {track.isrc}")
+        return None
+    
+    # Check each MBID against our Plex index
+    async with cache_lock:
+        for mbid in candidate_mbids:
+            normalized_mbid = _normalize_mbid(mbid)
+            if not normalized_mbid:
+                continue
+            if normalized_mbid in plex_mbid_index:
+                entry = plex_mbid_index[normalized_mbid]
+                plex_track = entry.get("track")
+                
+                if plex_track:
+                    logging.info(
+                        "MBID proxy match: ISRC %s -> MBID %s -> '%s' by '%s'",
+                        track.isrc,
+                        normalized_mbid,
+                        plex_track.title,
+                        plex_track.artist().title if hasattr(plex_track, 'artist') else "Unknown",
+                    )
+                    return plex_track
+                else:
+                    # Track not in memory, but we have the plex_id - fetch it
+                    plex_id = entry.get("plex_id")
+                    if plex_id:
+                        try:
+                            await _acquire_rate_limit()
+                            plex_track = await asyncio.to_thread(
+                                plex.fetchItem, plex_id
+                            )
+                            if plex_track:
+                                # Update the index with the fetched track
+                                plex_mbid_index[normalized_mbid]["track"] = plex_track
+                                logging.info(
+                                    "MBID proxy match (fetched): ISRC %s -> MBID %s -> '%s'",
+                                    track.isrc,
+                                    normalized_mbid,
+                                    plex_track.title,
+                                )
+                                return plex_track
+                        except Exception as e:
+                            logging.debug(f"Failed to fetch Plex track {plex_id}: {e}")
+    
+    # Fallback: try Plex GUID search for MBIDs if not in index
+    for mbid in candidate_mbids:
+        normalized_mbid = _normalize_mbid(mbid)
+        if not normalized_mbid:
+            continue
+        try:
+            await _acquire_rate_limit()
+            results = await asyncio.to_thread(
+                plex.library.search,
+                libtype="track",
+                **{"track.guid": f"mbid://{normalized_mbid}"}
+            )
+            if results:
+                logging.info(
+                    "MBID proxy fallback match: ISRC %s -> MBID %s",
+                    track.isrc,
+                    normalized_mbid,
+                )
+                return results[0]
+        except Exception as e:
+            logging.debug("MBID fallback search failed for %s: %s", normalized_mbid, e)
+
+    return None
+
+
+async def initialize_cache(plex: PlexServer, user_inputs: Optional[UserInputs] = None) -> None:
+    """
+    Initialize the Plex track cache and MBID index.
+    
+    Also performs cache maintenance (cleanup of expired MusicBrainz entries).
+    """
+    global musicbrainz_enabled
+    
+    # Configure MusicBrainz settings from user inputs
+    if user_inputs:
+        musicbrainz_enabled = user_inputs.musicbrainz_enabled
+        # Update environment variables for musicbrainz module
+        if user_inputs.musicbrainz_cache_ttl_days:
+            os.environ["MUSICBRAINZ_CACHE_TTL_DAYS"] = str(user_inputs.musicbrainz_cache_ttl_days)
+        if user_inputs.musicbrainz_negative_cache_ttl_days:
+            os.environ["MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS"] = str(user_inputs.musicbrainz_negative_cache_ttl_days)
+    
+    # Load cached data from database
     await load_cache_from_db()
+    
+    # Cleanup expired MusicBrainz cache entries
+    if musicbrainz_enabled:
+        await musicbrainz.cleanup_expired_cache()
+    
+    # If no tracks in cache, start background fetch
     if not plex_tracks_cache:
         asyncio.create_task(fetch_and_cache_tracks(plex))
 

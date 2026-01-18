@@ -173,6 +173,17 @@ class PlexistSettings(BaseSettings):
         default=1.0, validation_alias="QOBUZ_RETRY_BACKOFF_SECONDS"
     )
 
+    # MusicBrainz ISRC resolution settings
+    musicbrainz_enabled: FlexibleBool = Field(
+        default=True, validation_alias="MUSICBRAINZ_ENABLED"
+    )
+    musicbrainz_cache_ttl_days: int = Field(
+        default=90, validation_alias="MUSICBRAINZ_CACHE_TTL_DAYS"
+    )
+    musicbrainz_negative_cache_ttl_days: int = Field(
+        default=7, validation_alias="MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS"
+    )
+
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
     return UserInputs(
@@ -222,4 +233,8 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         qobuz_request_timeout_seconds=settings.qobuz_request_timeout_seconds,
         qobuz_max_retries=settings.qobuz_max_retries,
         qobuz_retry_backoff_seconds=settings.qobuz_retry_backoff_seconds,
+        # MusicBrainz
+        musicbrainz_enabled=settings.musicbrainz_enabled,
+        musicbrainz_cache_ttl_days=settings.musicbrainz_cache_ttl_days,
+        musicbrainz_negative_cache_ttl_days=settings.musicbrainz_negative_cache_ttl_days,
     )

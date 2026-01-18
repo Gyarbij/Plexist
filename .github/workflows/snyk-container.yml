@@ -57,7 +57,18 @@ jobs:
         {
           "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
           "version": "2.1.0",
-          "runs": []
+          "runs": [
+            {
+              "tool": {
+                "driver": {
+                  "name": "snyk",
+                  "informationUri": "https://snyk.io",
+                  "rules": []
+                }
+              },
+              "results": []
+            }
+          ]
         }
         EOF
         fi

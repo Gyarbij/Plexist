@@ -8,7 +8,7 @@ aiolimiter==1.1.0
     # via -r requirements.in
 aiosignal==1.4.0
     # via aiohttp
-aiosqlite==0.21.0
+aiosqlite==0.22.1
     # via -r requirements.in
 annotated-types==0.7.0
     # via pydantic
@@ -99,7 +99,6 @@ tidalapi==0.8.10
     # via -r requirements.in
 typing-extensions==4.15.0
     # via
-    #   aiosqlite
     #   pydantic
     #   pydantic-core
     #   tidalapi

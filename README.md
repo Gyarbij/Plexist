@@ -482,7 +482,10 @@ services:
       # QOBUZ_PASSWORD: your-password
 
     volumes:
-      - ./data:/app/data  # For missing tracks, OAuth cache, and keys
+      - plexist-data:/app/data  # Named volume avoids UID permission issues
+
+volumes:
+  plexist-data:
 ```
 
 **Run with:**
@@ -490,6 +493,8 @@ services:
 ```bash
 docker compose up -d
 ```
+
+> **Note:** The container runs as non-root (UID 65532). If you prefer a bind mount instead of a named volume, ensure the host directory is writable by UID 65532 (or adjust ownership/permissions accordingly).
 
 <details>
 <summary><strong>Minimal Compose Example (Spotify Only)</strong></summary>
@@ -507,7 +512,10 @@ services:
       SPOTIFY_CLIENT_SECRET: your-client-secret
       SPOTIFY_USER_ID: your-user-id
     volumes:
-      - ./data:/app/data
+      - plexist-data:/app/data
+
+volumes:
+  plexist-data:
 ```
 
 </details>
@@ -525,7 +533,10 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      - plexist-data:/app/data
+
+volumes:
+  plexist-data:
 ```
 
 **.env:**

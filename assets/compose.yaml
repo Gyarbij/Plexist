@@ -81,4 +81,7 @@ services:
       # QOBUZ_RETRY_BACKOFF_SECONDS: 1.0
 
     volumes:
-      - ./data:/app/data  # For missing tracks, OAuth cache, and keys
+      - plexist-data:/app/data  # Named volume avoids UID permission issues
+
+volumes:
+  plexist-data:

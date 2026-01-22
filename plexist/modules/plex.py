@@ -22,14 +22,14 @@ from . import musicbrainz
 
 
 def _resolve_db_path() -> str:
-    env_path = os.getenv("DB_PATH")
-    if env_path:
-        return env_path
-    if os.path.isdir("/app/data"):
-        return "/app/data/plexist.db"
-    if os.path.isdir("data"):
-        return os.path.join("data", "plexist.db")
-    return "plexist.db"
+    """Resolve database path from environment or use default.
+    
+    For local development, set DB_PATH environment variable:
+        export DB_PATH=./data/plexist.db
+    
+    Default: /app/data/plexist.db (container-friendly path)
+    """
+    return os.getenv("DB_PATH", "/app/data/plexist.db")
 
 
 DB_PATH = _resolve_db_path()

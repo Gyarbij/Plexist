@@ -345,7 +345,6 @@ docker run -d \
   --restart unless-stopped \
   -e PLEX_URL=http://192.168.0.2:32400 \
   -e PLEX_TOKEN=your-plex-token \
-  -e DB_PATH=/app/data/plexist.db \
   -e SECONDS_TO_WAIT=84000 \
   -e LOG_LEVEL=INFO \
   -e LOG_FORMAT=plain \
@@ -360,7 +359,7 @@ docker run -d \
   -e SPOTIFY_CLIENT_ID=your-client-id \
   -e SPOTIFY_CLIENT_SECRET=your-client-secret \
   -e SPOTIFY_USER_ID=your-user-id \
-  -v /path/to/data:/app/data \
+  -v plexist-data:/app/data \
   gyarbij/plexist:latest
   # Or use: ghcr.io/gyarbij/plexist:latest
 ```
@@ -412,7 +411,7 @@ docker run -d \
   -e QOBUZ_USERNAME=your-email \
   -e QOBUZ_PASSWORD=your-password \
   # === Volume ===
-  -v /path/to/data:/app/data \
+  -v plexist-data:/app/data \
   gyarbij/plexist:latest
 ```
 
@@ -494,7 +493,16 @@ volumes:
 docker compose up -d
 ```
 
-> **Note:** The container runs as non-root (UID 65532). If you prefer a bind mount instead of a named volume, ensure the host directory is writable by UID 65532 (or adjust ownership/permissions accordingly).
+### Data Persistence
+
+The SQLite database is stored at `/app/data/plexist.db` inside the container. Use a **named volume** (recommended) for automatic permission handling:
+
+```yaml
+volumes:
+  - plexist-data:/app/data
+```
+
+> **Note:** The container runs as non-root user (UID 65532). Named volumes handle permissions automatically. For local development outside Docker, set `DB_PATH` environment variable to a writable location (e.g., `DB_PATH=./data/plexist.db`).
 
 <details>
 <summary><strong>Minimal Compose Example (Spotify Only)</strong></summary>

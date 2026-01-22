@@ -80,4 +80,7 @@ services:
       # QOBUZ_RETRY_BACKOFF_SECONDS: 1.0
 
     volumes:
-      - ./data:/app/data  # For missing tracks, OAuth cache, and keys
+      - plexist-data:/app/data  # Persistent storage for database, missing tracks, OAuth cache, and keys
+
+volumes:
+  plexist-data:  # Named volume for data persistence

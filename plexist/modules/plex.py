@@ -18,7 +18,7 @@ from .helperClasses import Playlist, Track, UserInputs
 from .base import MusicServiceProvider, ServiceRegistry
 
 
-DB_PATH = os.getenv("DB_PATH", "plexist.db")
+DB_PATH = os.getenv("DB_PATH", "/app/data/plexist.db")
 
 # Configuration constants
 PLEX_BATCH_SIZE = 500  # Number of tracks to fetch per Plex API request
@@ -50,6 +50,10 @@ def _rebuild_cache_index() -> None:
         plex_tracks_cache_index[key] = track
 
 async def initialize_db() -> None:
+    # Ensure the database directory exists
+    db_path = pathlib.Path(DB_PATH)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             """

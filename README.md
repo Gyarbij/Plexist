@@ -296,6 +296,7 @@ All boolean options accept flexible values (case-insensitive):
 | `SECONDS_TO_WAIT` | `84000` | Seconds between sync cycles |
 | `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `LOG_FORMAT` | `plain` | Log format (`plain` or `json`) |
+| `DB_PATH` | `/app/data/plexist.db` | SQLite database file path (for track cache) |
 
 #### Playlist Options
 
@@ -323,6 +324,32 @@ All boolean options accept flexible values (case-insensitive):
 
 > **💡 For slower servers** (Synology NAS, Raspberry Pi, older hardware):  
 > Lower these values to `2` each to reduce CPU load and avoid connection pool warnings.
+
+#### Data Persistence
+
+The `/app/data` directory is used to store:
+- **SQLite database** (`plexist.db`) — Track cache for faster matching
+- **Missing tracks** — CSV/JSON files (if enabled)
+- **OAuth cache** — Spotify authentication tokens (`.spotify_cache`)
+- **API keys** — Apple Music private keys (`AuthKey.p8`)
+
+**Volume Setup:**
+
+Use a Docker volume to persist this data across container restarts:
+
+```bash
+# Named volume (recommended)
+-v plexist-data:/app/data
+
+# Bind mount (alternative - use local directory)
+-v /path/to/local/data:/app/data
+```
+
+> **⚠️ Important:** The container runs as a non-root user (UID 65532). When using bind mounts, ensure the local directory has appropriate permissions:
+> ```bash
+> mkdir -p /path/to/local/data
+> chmod 777 /path/to/local/data  # Or: chown 65532:65532 /path/to/local/data
+> ```
 
 
 ### Docker Run
@@ -467,7 +494,10 @@ services:
       # QOBUZ_PASSWORD: your-password
 
     volumes:
-      - ./data:/app/data  # For missing tracks, OAuth cache, and keys
+      - plexist-data:/app/data  # Persistent storage for database, missing tracks, OAuth cache, and keys
+
+volumes:
+  plexist-data:  # Named volume for data persistence
 ```
 
 **Run with:**
@@ -475,6 +505,10 @@ services:
 ```bash
 docker compose up -d
 ```
+
+> **💡 Volume Options:**
+> - **Named volume** (shown above): Docker manages the storage location. Data persists across container recreates.
+> - **Bind mount**: Use `./data:/app/data` to store data in a local directory. Ensure directory has proper permissions (see Data Persistence section above).
 
 <details>
 <summary><strong>Minimal Compose Example (Spotify Only)</strong></summary>
@@ -492,7 +526,10 @@ services:
       SPOTIFY_CLIENT_SECRET: your-client-secret
       SPOTIFY_USER_ID: your-user-id
     volumes:
-      - ./data:/app/data
+      - plexist-data:/app/data
+
+volumes:
+  plexist-data:
 ```
 
 </details>
@@ -510,7 +547,10 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      - plexist-data:/app/data
+
+volumes:
+  plexist-data:
 ```
 
 **.env:**

@@ -34,7 +34,10 @@ COPY --from=builder /usr/local /usr/local
 
 COPY --from=builder /opt/venv /opt/venv
 COPY plexist /app/plexist
-COPY --from=builder /app/data /app/data
+
+# Create data directory with correct ownership for nonroot user (UID 65532)
+# This must be done before switching to USER 65532
+COPY --from=builder --chown=65532:65532 /app/data /app/data
 
 COPY --from=builder /lib/ /lib/
 COPY --from=builder /usr/lib/ /usr/lib/

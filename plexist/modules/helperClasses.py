@@ -94,3 +94,4 @@ class UserInputs:
     musicbrainz_enabled: bool = True
     musicbrainz_cache_ttl_days: int = 90
     musicbrainz_negative_cache_ttl_days: int = 7
+    musicbrainz_api_key: Optional[str] = None

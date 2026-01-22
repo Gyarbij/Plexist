@@ -27,6 +27,7 @@ MUSICBRAINZ_USER_AGENT = os.getenv(
     "MUSICBRAINZ_USER_AGENT",
     "Plexist/3.0 (https://github.com/Gyarbij/Plexist)"
 )
+MUSICBRAINZ_API_KEY = os.getenv("MUSICBRAINZ_API_KEY")
 
 # MusicBrainz API rate limit: 1 request per second for anonymous users
 mb_rate_limiter = AsyncLimiter(1, 1.1)  # Slightly under 1/sec to be safe
@@ -44,11 +45,14 @@ async def _get_http_session() -> aiohttp.ClientSession:
     global _http_session
     async with _session_lock:
         if _http_session is None or _http_session.closed:
+            headers = {
+                "User-Agent": MUSICBRAINZ_USER_AGENT,
+                "Accept": "application/json",
+            }
+            if MUSICBRAINZ_API_KEY:
+                headers["Authorization"] = f"Bearer {MUSICBRAINZ_API_KEY}"
             _http_session = aiohttp.ClientSession(
-                headers={
-                    "User-Agent": MUSICBRAINZ_USER_AGENT,
-                    "Accept": "application/json",
-                }
+                headers=headers
             )
         return _http_session
 

@@ -95,6 +95,7 @@ SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 | `MUSICBRAINZ_ENABLED` | `1` | Enable ISRC → MusicBrainz → MBID proxy matching |
 | `MUSICBRAINZ_CACHE_TTL_DAYS` | `90` | Cache duration for successful ISRC lookups |
 | `MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS` | `7` | Cache duration for ISRCs not found in MusicBrainz |
+| `MUSICBRAINZ_API_KEY` | *(optional)* | Optional MusicBrainz API key (sent as a Bearer token) |
 | `PLEX_EXTENDED_CACHE_ENABLED` | `1` | Enable extended cache indexes for faster matching |
 | `PLEX_DURATION_BUCKET_SECONDS` | `5` | Duration bucket size used for matching heuristics |
 
@@ -421,7 +422,7 @@ docker run -d \
 
 ### Docker Compose
 
-Create a `compose.yaml` file:
+Copy `assets/example.compose.yaml` to `compose.yaml`, then customize it:
 
 ```yaml
 services:
@@ -450,6 +451,9 @@ services:
       # === Performance ===
       MAX_REQUESTS_PER_SECOND: 5
       MAX_CONCURRENT_REQUESTS: 4
+
+      # === MusicBrainz (optional) ===
+      # MUSICBRAINZ_API_KEY: your-musicbrainz-api-key
 
       # === Spotify (remove if not used) ===
       SPOTIFY_CLIENT_ID: your-client-id

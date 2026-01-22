@@ -840,6 +840,8 @@ async def initialize_cache(plex: PlexServer, user_inputs: Optional[UserInputs] =
             os.environ["MUSICBRAINZ_CACHE_TTL_DAYS"] = str(user_inputs.musicbrainz_cache_ttl_days)
         if user_inputs.musicbrainz_negative_cache_ttl_days:
             os.environ["MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS"] = str(user_inputs.musicbrainz_negative_cache_ttl_days)
+        if user_inputs.musicbrainz_api_key:
+            os.environ["MUSICBRAINZ_API_KEY"] = user_inputs.musicbrainz_api_key
     
     # Load cached data from database
     await load_cache_from_db()

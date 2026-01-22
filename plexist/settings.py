@@ -190,6 +190,9 @@ class PlexistSettings(BaseSettings):
     musicbrainz_negative_cache_ttl_days: int = Field(
         default=7, validation_alias="MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS"
     )
+    musicbrainz_api_key: Optional[str] = Field(
+        default=None, validation_alias="MUSICBRAINZ_API_KEY"
+    )
 
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
@@ -246,4 +249,5 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         musicbrainz_enabled=settings.musicbrainz_enabled,
         musicbrainz_cache_ttl_days=settings.musicbrainz_cache_ttl_days,
         musicbrainz_negative_cache_ttl_days=settings.musicbrainz_negative_cache_ttl_days,
+        musicbrainz_api_key=settings.musicbrainz_api_key,
     )

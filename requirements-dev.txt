@@ -6,7 +6,9 @@ packaging==25.0
     # via pytest
 pluggy==1.6.0
     # via pytest
-pytest==8.4.2
+pygments==2.19.2
+    # via pytest
+pytest==9.0.2
     # via
     #   -r requirements-dev.in
     #   pytest-asyncio

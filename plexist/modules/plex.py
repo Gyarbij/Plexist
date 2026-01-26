@@ -475,9 +475,46 @@ async def load_cache_from_db() -> None:
         len(plex_mbid_index)
     )
 
+
+async def warm_mbid_cache_for_tracks(tracks: List[Track]) -> int:
+    """
+    Pre-warm the MusicBrainz ISRC cache for a batch of tracks.
+    
+    This is called before matching to minimize API calls during actual matching.
+    Uses batch cache lookup to efficiently identify which ISRCs need to be fetched.
+    
+    Args:
+        tracks: List of tracks with ISRCs to pre-cache
+        
+    Returns:
+        Number of new ISRCs fetched (cache misses)
+    """
+    if not musicbrainz_enabled:
+        return 0
+    
+    # Extract ISRCs from tracks
+    isrcs = [t.isrc for t in tracks if t.isrc]
+    
+    if not isrcs:
+        return 0
+    
+    logging.info(f"Pre-warming MBID cache for {len(isrcs)} ISRCs from {len(tracks)} tracks")
+    
+    try:
+        fetched = await musicbrainz.warm_cache_for_isrcs(isrcs)
+        return fetched
+    except Exception as e:
+        logging.error(f"Error warming MBID cache: {e}")
+        return 0
+
+
 async def _get_available_plex_tracks(
     plex: PlexServer, tracks: List[Track]
 ) -> List:
+    # Pre-warm MBID cache for all tracks with ISRCs to minimize API calls during matching
+    if musicbrainz_enabled:
+        await warm_mbid_cache_for_tracks(tracks)
+    
     semaphore = asyncio.Semaphore(max_concurrent_workers)
 
     async def match_track(track: Track):
@@ -733,69 +770,107 @@ async def _match_single_track(plex: PlexServer, track: Track):
 
 async def _match_via_mbid_proxy(plex: PlexServer, track: Track) -> Optional[plexapi.audio.Track]:
     """
-    Attempt to match a track via MusicBrainz MBID proxy.
+    Attempt to match a track via MusicBrainz MBID proxy with confidence scoring.
     
     Flow:
-    1. Look up the track's ISRC in MusicBrainz to get associated MBIDs
+    1. Look up the track's ISRC in MusicBrainz to get associated MBIDs with confidence scores
     2. Check if any of those MBIDs exist in our Plex MBID index
-    3. If found, return the matching Plex track (O(1) lookup)
+    3. Return the match with the highest confidence score
+    
+    Confidence scores are based on MBID type:
+    - Recording IDs: 1.0 (definitive audio identifier)
+    - Release-Track IDs: 0.95 (very reliable)
+    - Release IDs: 0.7 (may match multiple tracks)
+    - Unknown (cached): 0.5 (moderate confidence)
     
     This reduces load on Plex's SQLite database by doing lookups in-memory.
     """
     if not track.isrc:
         return None
     
-    # Get MBIDs for this ISRC (uses cache, falls back to MusicBrainz API)
-    candidate_mbids = await musicbrainz.get_mbids_for_isrc(track.isrc)
+    # Get MBIDs for this ISRC with confidence scores
+    scored_mbids = await musicbrainz.get_mbids_for_isrc_with_scores(track.isrc)
     
-    if not candidate_mbids:
+    if not scored_mbids:
         logging.debug(f"No MBIDs found for ISRC {track.isrc}")
         return None
     
-    # Check each MBID against our Plex index
+    # Track the best match found and its confidence
+    best_match: Optional[plexapi.audio.Track] = None
+    best_confidence: float = 0.0
+    best_mbid: Optional[str] = None
+    
+    # Check each MBID against our Plex index, prioritizing by confidence
     async with cache_lock:
-        for mbid in candidate_mbids:
-            normalized_mbid = _normalize_mbid(mbid)
+        for scored_mbid in scored_mbids:  # Already sorted by confidence (highest first)
+            normalized_mbid = _normalize_mbid(scored_mbid.mbid)
             if not normalized_mbid:
                 continue
+            
             if normalized_mbid in plex_mbid_index:
                 entry = plex_mbid_index[normalized_mbid]
                 plex_track = entry.get("track")
                 
-                if plex_track:
-                    logging.info(
-                        "MBID proxy match: ISRC %s -> MBID %s -> '%s' by '%s'",
-                        track.isrc,
-                        normalized_mbid,
-                        plex_track.title,
-                        plex_track.artist().title if hasattr(plex_track, 'artist') else "Unknown",
-                    )
-                    return plex_track
-                else:
+                if plex_track and scored_mbid.confidence > best_confidence:
+                    best_match = plex_track
+                    best_confidence = scored_mbid.confidence
+                    best_mbid = normalized_mbid
+                    
+                    # If we found a recording match (highest confidence), use it immediately
+                    if scored_mbid.mbid_type == musicbrainz.MBIDType.RECORDING:
+                        logging.info(
+                            "MBID proxy match (recording, confidence=%.2f): ISRC %s -> MBID %s -> '%s' by '%s'",
+                            best_confidence,
+                            track.isrc,
+                            best_mbid,
+                            best_match.title,
+                            best_match.artist().title if hasattr(best_match, 'artist') else "Unknown",
+                        )
+                        return best_match
+                
+                elif not plex_track:
                     # Track not in memory, but we have the plex_id - fetch it
                     plex_id = entry.get("plex_id")
                     if plex_id:
                         try:
                             await _acquire_rate_limit()
-                            plex_track = await asyncio.to_thread(
+                            fetched_track = await asyncio.to_thread(
                                 plex.fetchItem, plex_id
                             )
-                            if plex_track:
+                            if fetched_track and scored_mbid.confidence > best_confidence:
                                 # Update the index with the fetched track
-                                plex_mbid_index[normalized_mbid]["track"] = plex_track
-                                logging.info(
-                                    "MBID proxy match (fetched): ISRC %s -> MBID %s -> '%s'",
-                                    track.isrc,
-                                    normalized_mbid,
-                                    plex_track.title,
-                                )
-                                return plex_track
+                                plex_mbid_index[normalized_mbid]["track"] = fetched_track
+                                best_match = fetched_track
+                                best_confidence = scored_mbid.confidence
+                                best_mbid = normalized_mbid
+                                
+                                if scored_mbid.mbid_type == musicbrainz.MBIDType.RECORDING:
+                                    logging.info(
+                                        "MBID proxy match (fetched, recording, confidence=%.2f): ISRC %s -> MBID %s -> '%s'",
+                                        best_confidence,
+                                        track.isrc,
+                                        best_mbid,
+                                        best_match.title,
+                                    )
+                                    return best_match
                         except Exception as e:
                             logging.debug(f"Failed to fetch Plex track {plex_id}: {e}")
     
-    # Fallback: try Plex GUID search for MBIDs if not in index
-    for mbid in candidate_mbids:
-        normalized_mbid = _normalize_mbid(mbid)
+    # Return best match found from index (if any)
+    if best_match:
+        logging.info(
+            "MBID proxy match (confidence=%.2f): ISRC %s -> MBID %s -> '%s' by '%s'",
+            best_confidence,
+            track.isrc,
+            best_mbid,
+            best_match.title,
+            best_match.artist().title if hasattr(best_match, 'artist') else "Unknown",
+        )
+        return best_match
+    
+    # Fallback: try Plex GUID search for MBIDs not in index (with confidence ordering)
+    for scored_mbid in scored_mbids:
+        normalized_mbid = _normalize_mbid(scored_mbid.mbid)
         if not normalized_mbid:
             continue
         try:
@@ -807,9 +882,11 @@ async def _match_via_mbid_proxy(plex: PlexServer, track: Track) -> Optional[plex
             )
             if results:
                 logging.info(
-                    "MBID proxy fallback match: ISRC %s -> MBID %s",
+                    "MBID proxy fallback match (confidence=%.2f): ISRC %s -> MBID %s -> '%s'",
+                    scored_mbid.confidence,
                     track.isrc,
                     normalized_mbid,
+                    results[0].title,
                 )
                 return results[0]
         except Exception as e:

@@ -369,3 +369,288 @@ class TestCacheTTL:
         # Fresh entry should still exist
         result = await self.mb.get_cached_mbids("FRESH")
         assert result == {"mbid-fresh"}
+
+
+class TestMBIDConfidenceScoring:
+    """Test suite for MBID confidence scoring functionality."""
+
+    @pytest.fixture(autouse=True)
+    def setup_test_db(self):
+        """Create a fresh test database for each test."""
+        self.test_db = tempfile.mktemp(suffix=".db")
+        os.environ["DB_PATH"] = self.test_db
+        
+        import importlib
+        import modules.musicbrainz as mb_module
+        importlib.reload(mb_module)
+        self.mb = mb_module
+        
+        yield
+        
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+    def test_mbid_type_confidence_scores(self):
+        """Test that MBID types have correct confidence scores."""
+        assert self.mb.MBID_CONFIDENCE_SCORES[self.mb.MBIDType.RECORDING] == 1.0
+        assert self.mb.MBID_CONFIDENCE_SCORES[self.mb.MBIDType.RELEASE_TRACK] == 0.95
+        assert self.mb.MBID_CONFIDENCE_SCORES[self.mb.MBIDType.RELEASE] == 0.7
+        assert self.mb.MBID_CONFIDENCE_SCORES[self.mb.MBIDType.UNKNOWN] == 0.5
+
+    def test_scored_mbid_equality(self):
+        """Test ScoredMBID equality is based on mbid only."""
+        mbid1 = self.mb.ScoredMBID("mbid-123", self.mb.MBIDType.RECORDING, 1.0)
+        mbid2 = self.mb.ScoredMBID("mbid-123", self.mb.MBIDType.RELEASE, 0.7)
+        mbid3 = self.mb.ScoredMBID("mbid-456", self.mb.MBIDType.RECORDING, 1.0)
+        
+        assert mbid1 == mbid2  # Same MBID, different type
+        assert mbid1 != mbid3  # Different MBID
+
+    def test_scored_mbid_hashable(self):
+        """Test that ScoredMBID can be used in sets."""
+        mbid1 = self.mb.ScoredMBID("mbid-123", self.mb.MBIDType.RECORDING, 1.0)
+        mbid2 = self.mb.ScoredMBID("mbid-456", self.mb.MBIDType.RELEASE_TRACK, 0.95)
+        
+        mbid_set = {mbid1, mbid2}
+        assert len(mbid_set) == 2
+
+    @pytest.mark.asyncio
+    async def test_api_response_parsing_with_scores(self):
+        """Test parsing of MusicBrainz API response with confidence scores."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        # Mock aiohttp response
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "recordings": [
+                {
+                    "id": "recording-id-123",
+                    "releases": [
+                        {
+                            "id": "release-id-456",
+                            "media": [
+                                {
+                                    "tracks": [
+                                        {"id": "track-id-aaa"},
+                                    ]
+                                }
+                            ]
+                        },
+                    ]
+                }
+            ]
+        })
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        
+        with patch.object(self.mb, '_get_http_session', new_callable=AsyncMock) as mock_get_session:
+            mock_get_session.return_value = mock_session
+            
+            result = await self.mb.query_musicbrainz_api_with_scores("TESTISRC12345")
+            
+            # Should contain different MBID types with correct confidence
+            mbid_dict = {sm.mbid: sm for sm in result}
+            
+            assert "recording-id-123" in mbid_dict
+            assert mbid_dict["recording-id-123"].mbid_type == self.mb.MBIDType.RECORDING
+            assert mbid_dict["recording-id-123"].confidence == 1.0
+            
+            assert "release-id-456" in mbid_dict
+            assert mbid_dict["release-id-456"].mbid_type == self.mb.MBIDType.RELEASE
+            assert mbid_dict["release-id-456"].confidence == 0.7
+            
+            assert "track-id-aaa" in mbid_dict
+            assert mbid_dict["track-id-aaa"].mbid_type == self.mb.MBIDType.RELEASE_TRACK
+            assert mbid_dict["track-id-aaa"].confidence == 0.95
+
+    @pytest.mark.asyncio
+    async def test_get_mbids_with_scores_sorted_by_confidence(self):
+        """Test that get_mbids_for_isrc_with_scores returns sorted by confidence."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        # Create mock response with different MBID types
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "recordings": [
+                {
+                    "id": "recording-id",
+                    "releases": [
+                        {
+                            "id": "release-id",
+                            "media": [{"tracks": [{"id": "track-id"}]}]
+                        }
+                    ]
+                }
+            ]
+        })
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        
+        with patch.object(self.mb, '_get_http_session', new_callable=AsyncMock) as mock_get_session:
+            mock_get_session.return_value = mock_session
+            
+            result = await self.mb.get_mbids_for_isrc_with_scores("TESTISRC12345")
+            
+            # Should be sorted by confidence (highest first)
+            confidences = [sm.confidence for sm in result]
+            assert confidences == sorted(confidences, reverse=True)
+            
+            # First should be recording (1.0), then track (0.95), then release (0.7)
+            assert result[0].mbid_type == self.mb.MBIDType.RECORDING
+
+
+class TestBatchISRCResolution:
+    """Test suite for batch ISRC resolution functionality."""
+
+    @pytest.fixture(autouse=True)
+    def setup_test_db(self):
+        """Create a fresh test database for each test."""
+        self.test_db = tempfile.mktemp(suffix=".db")
+        os.environ["DB_PATH"] = self.test_db
+        
+        import importlib
+        import modules.musicbrainz as mb_module
+        importlib.reload(mb_module)
+        self.mb = mb_module
+        
+        yield
+        
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+    @pytest.mark.asyncio
+    async def test_batch_cache_lookup(self):
+        """Test batch cache lookup for multiple ISRCs."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        # Pre-populate cache with some entries
+        await self.mb.save_mbids_to_cache("ISRC001", {"mbid-001-a", "mbid-001-b"})
+        await self.mb.save_mbids_to_cache("ISRC002", {"mbid-002"})
+        await self.mb.save_mbids_to_cache("ISRC003", set())  # negative cache
+        
+        # Batch lookup including cached and non-cached ISRCs
+        results = await self.mb.get_cached_mbids_batch(["ISRC001", "ISRC002", "ISRC003", "ISRC004"])
+        
+        assert results["ISRC001"] == {"mbid-001-a", "mbid-001-b"}
+        assert results["ISRC002"] == {"mbid-002"}
+        assert results["ISRC003"] == set()  # negative cache
+        assert results["ISRC004"] is None  # not in cache
+
+    @pytest.mark.asyncio
+    async def test_batch_isrc_resolution(self):
+        """Test batch ISRC resolution with cache hits and misses."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        # Pre-populate cache with one entry
+        await self.mb.save_mbids_to_cache("CACHED001", {"mbid-cached"})
+        
+        # Mock API for cache misses
+        with patch.object(self.mb, 'query_musicbrainz_api', new_callable=AsyncMock) as mock_api:
+            mock_api.return_value = {"mbid-fetched"}
+            
+            results = await self.mb.get_mbids_for_isrcs_batch(["CACHED001", "NOTCACHED001"])
+            
+            # Cached entry should not trigger API call
+            assert results["CACHED001"] == {"mbid-cached"}
+            
+            # Non-cached entry should trigger API and be returned
+            assert results["NOTCACHED001"] == {"mbid-fetched"}
+            
+            # API should only be called once (for the cache miss)
+            mock_api.assert_called_once_with("NOTCACHED001")
+
+    @pytest.mark.asyncio
+    async def test_batch_resolution_deduplicates_isrcs(self):
+        """Test that batch resolution deduplicates ISRCs."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        with patch.object(self.mb, 'query_musicbrainz_api', new_callable=AsyncMock) as mock_api:
+            mock_api.return_value = {"mbid-1"}
+            
+            # Pass duplicate ISRCs (different cases, with/without hyphens)
+            results = await self.mb.get_mbids_for_isrcs_batch([
+                "USRC12345678",
+                "usrc12345678",
+                "US-RC-12345678",
+            ])
+            
+            # Should only make one API call
+            mock_api.assert_called_once()
+            
+            # Result should be keyed by normalized ISRC
+            assert "USRC12345678" in results
+
+    @pytest.mark.asyncio
+    async def test_batch_resolution_with_scores(self):
+        """Test batch ISRC resolution with confidence scores."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        # Pre-populate cache (cached entries get UNKNOWN type)
+        await self.mb.save_mbids_to_cache("CACHED001", {"mbid-cached"})
+        
+        # Mock API for cache misses (fresh queries get proper types)
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "recordings": [{"id": "recording-fresh"}]
+        })
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        
+        with patch.object(self.mb, '_get_http_session', new_callable=AsyncMock) as mock_get_session:
+            mock_get_session.return_value = mock_session
+            
+            results = await self.mb.get_mbids_for_isrcs_batch_with_scores(["CACHED001", "FRESH001"])
+            
+            # Cached entry has UNKNOWN type
+            assert results["CACHED001"][0].mbid_type == self.mb.MBIDType.UNKNOWN
+            assert results["CACHED001"][0].confidence == 0.5
+            
+            # Fresh entry has proper RECORDING type
+            assert results["FRESH001"][0].mbid_type == self.mb.MBIDType.RECORDING
+            assert results["FRESH001"][0].confidence == 1.0
+
+    @pytest.mark.asyncio
+    async def test_warm_cache_for_isrcs(self):
+        """Test pre-warming cache for a list of ISRCs."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        # Pre-populate one entry
+        await self.mb.save_mbids_to_cache("ALREADY_CACHED", {"mbid-existing"})
+        
+        with patch.object(self.mb, 'query_musicbrainz_api', new_callable=AsyncMock) as mock_api:
+            mock_api.return_value = {"mbid-new"}
+            
+            fetched = await self.mb.warm_cache_for_isrcs([
+                "ALREADY_CACHED",
+                "NEW_ISRC_1",
+                "NEW_ISRC_2",
+            ])
+            
+            # Should return count of newly fetched ISRCs
+            assert fetched == 2
+            
+            # API should be called for cache misses only
+            assert mock_api.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_empty_batch_returns_empty_dict(self):
+        """Test that empty batch returns empty dict."""
+        await self.mb.initialize_musicbrainz_db()
+        
+        results = await self.mb.get_mbids_for_isrcs_batch([])
+        assert results == {}
+        
+        results_scored = await self.mb.get_mbids_for_isrcs_batch_with_scores([])
+        assert results_scored == {}

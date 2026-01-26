@@ -525,6 +525,8 @@ def _extract_track_metadata(track_data: Dict[str, Any]) -> Track:
     
     # Extract ISRC - Qobuz provides this at track level
     isrc = track_data.get("isrc")
+    duration_seconds = track_data.get("duration")
+    duration_ms = int(duration_seconds * 1000) if duration_seconds else None
     
     return Track(
         title=title,
@@ -534,6 +536,7 @@ def _extract_track_metadata(track_data: Dict[str, Any]) -> Track:
         year=year,
         genre=genre,
         isrc=isrc,
+        duration_ms=duration_ms,
     )
 
 

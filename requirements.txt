@@ -4,11 +4,11 @@ aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.13.3
     # via -r requirements.in
-aiolimiter==1.1.0
+aiolimiter==1.2.1
     # via -r requirements.in
 aiosignal==1.4.0
     # via aiohttp
-aiosqlite==0.21.0
+aiosqlite==0.22.1
     # via -r requirements.in
 annotated-types==0.7.0
     # via pydantic
@@ -47,7 +47,7 @@ idna==3.11
     #   yarl
 isodate==0.7.2
     # via tidalapi
-mpegdash==0.4.0
+mpegdash==0.4.1
     # via tidalapi
 multidict==6.7.0
     # via
@@ -99,7 +99,6 @@ tidalapi==0.8.10
     # via -r requirements.in
 typing-extensions==4.15.0
     # via
-    #   aiosqlite
     #   pydantic
     #   pydantic-core
     #   tidalapi

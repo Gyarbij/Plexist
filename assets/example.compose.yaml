@@ -37,6 +37,9 @@ services:
       MAX_REQUESTS_PER_SECOND: 5
       MAX_CONCURRENT_REQUESTS: 4
 
+      # === MusicBrainz (Optional) ===
+      # MUSICBRAINZ_API_KEY: your-musicbrainz-api-key
+
       # === Spotify ===
       # SPOTIFY_CLIENT_ID: your-client-id
       # SPOTIFY_CLIENT_SECRET: your-client-secret

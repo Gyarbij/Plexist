@@ -19,12 +19,16 @@ RUN python -m venv /opt/venv \
  && /opt/venv/bin/python -m pip install --upgrade pip \
  && /opt/venv/bin/pip install --no-cache-dir --only-binary=:all: --no-binary=pyaes,ratelimit,mpegdash,cffi,pycparser -r requirements.txt
 
+RUN mkdir -p /app/data \
+ && chown -R 65532:65532 /app/data
+
 # ---------- runtime ----------
 FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:/usr/local/bin:$PATH" \
-    LD_LIBRARY_PATH="/lib:/usr/lib:/usr/local/lib"
+    LD_LIBRARY_PATH="/lib:/usr/lib:/usr/local/lib" \
+    DB_PATH="/app/data/plexist.db"
 
 WORKDIR /app
 
@@ -32,6 +36,10 @@ COPY --from=builder /usr/local /usr/local
 
 COPY --from=builder /opt/venv /opt/venv
 COPY plexist /app/plexist
+
+# Create data directory with correct ownership for nonroot user (UID 65532)
+# This must be done before switching to USER 65532
+COPY --from=builder --chown=65532:65532 /app/data /app/data
 
 COPY --from=builder /lib/ /lib/
 COPY --from=builder /usr/lib/ /usr/lib/

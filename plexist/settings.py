@@ -60,6 +60,13 @@ class PlexistSettings(BaseSettings):
         default=4, validation_alias="MAX_CONCURRENT_REQUESTS"
     )
 
+    plex_extended_cache_enabled: FlexibleBool = Field(
+        default=True, validation_alias="PLEX_EXTENDED_CACHE_ENABLED"
+    )
+    plex_duration_bucket_seconds: int = Field(
+        default=5, validation_alias="PLEX_DURATION_BUCKET_SECONDS"
+    )
+
     spotipy_client_id: Optional[str] = Field(
         default=None, validation_alias="SPOTIFY_CLIENT_ID"
     )
@@ -173,6 +180,20 @@ class PlexistSettings(BaseSettings):
         default=1.0, validation_alias="QOBUZ_RETRY_BACKOFF_SECONDS"
     )
 
+    # MusicBrainz ISRC resolution settings
+    musicbrainz_enabled: FlexibleBool = Field(
+        default=True, validation_alias="MUSICBRAINZ_ENABLED"
+    )
+    musicbrainz_cache_ttl_days: int = Field(
+        default=90, validation_alias="MUSICBRAINZ_CACHE_TTL_DAYS"
+    )
+    musicbrainz_negative_cache_ttl_days: int = Field(
+        default=7, validation_alias="MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS"
+    )
+    musicbrainz_api_key: Optional[str] = Field(
+        default=None, validation_alias="MUSICBRAINZ_API_KEY"
+    )
+
 
 def build_user_inputs(settings: PlexistSettings) -> UserInputs:
     return UserInputs(
@@ -186,6 +207,8 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         wait_seconds=settings.wait_seconds,
         max_requests_per_second=settings.max_requests_per_second,
         max_concurrent_requests=settings.max_concurrent_requests,
+        plex_extended_cache_enabled=settings.plex_extended_cache_enabled,
+        plex_duration_bucket_seconds=settings.plex_duration_bucket_seconds,
         sync_liked_tracks=settings.sync_liked_tracks,
         sync_pairs=settings.sync_pairs,
         spotipy_client_id=settings.spotipy_client_id,
@@ -222,4 +245,9 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         qobuz_request_timeout_seconds=settings.qobuz_request_timeout_seconds,
         qobuz_max_retries=settings.qobuz_max_retries,
         qobuz_retry_backoff_seconds=settings.qobuz_retry_backoff_seconds,
+        # MusicBrainz
+        musicbrainz_enabled=settings.musicbrainz_enabled,
+        musicbrainz_cache_ttl_days=settings.musicbrainz_cache_ttl_days,
+        musicbrainz_negative_cache_ttl_days=settings.musicbrainz_negative_cache_ttl_days,
+        musicbrainz_api_key=settings.musicbrainz_api_key,
     )

@@ -515,6 +515,7 @@ def _extract_track_metadata(track_data: dict) -> Track:
     
     # Extract ISRC - Apple Music provides this in attributes
     isrc = attributes.get("isrc")
+    duration_ms = attributes.get("durationInMillis")
     
     return Track(
         title=title,
@@ -524,6 +525,7 @@ def _extract_track_metadata(track_data: dict) -> Track:
         year=year,
         genre=genre,
         isrc=isrc,
+        duration_ms=duration_ms,
     )
 
 

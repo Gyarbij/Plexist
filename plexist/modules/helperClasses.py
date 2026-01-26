@@ -11,6 +11,7 @@ class Track:
     year: str  
     genre: str
     isrc: Optional[str] = None  # International Standard Recording Code for accurate matching
+    duration_ms: Optional[int] = None  # Track duration in milliseconds
 
 
 @dataclass
@@ -36,6 +37,10 @@ class UserInputs:
     # Rate limiting settings
     max_requests_per_second: float = 5.0
     max_concurrent_requests: int = 4
+
+    # Plex cache optimization settings
+    plex_extended_cache_enabled: bool = True
+    plex_duration_bucket_seconds: int = 5
 
     # Liked/Favorited tracks sync
     sync_liked_tracks: bool = False
@@ -84,3 +89,9 @@ class UserInputs:
     qobuz_request_timeout_seconds: Optional[int] = 10
     qobuz_max_retries: Optional[int] = 3
     qobuz_retry_backoff_seconds: Optional[float] = 1.0
+
+    # MusicBrainz ISRC resolution settings
+    musicbrainz_enabled: bool = True
+    musicbrainz_cache_ttl_days: int = 90
+    musicbrainz_negative_cache_ttl_days: int = 7
+    musicbrainz_api_key: Optional[str] = None

@@ -20,7 +20,7 @@
 | **Auto Updates** | Keeps playlists in sync with your streaming services |
 | **New Playlists** | Automatically creates Plex playlists when added to your streaming service |
 | **Liked Tracks** | Syncs favorited tracks to Plex as 5-star ratings (appears in "Liked Tracks" smart playlist) |
-| **ISRC Matching** | Uses ISRC codes for accurate track matching (falls back to fuzzy matching) |
+| **ISRC + MBID Matching** | Uses ISRC codes and MusicBrainz MBID proxy matching, then falls back to fuzzy matching |
 
 ### Supported Services
 
@@ -66,8 +66,9 @@ SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 
 1. **Fetches playlists** from the source service
 2. **Matches tracks** in the destination using:
-   - **ISRC codes** (International Standard Recording Code) for exact matching
-   - **Metadata fallback** (title/artist/album) when ISRC unavailable
+  - **ISRC codes** (International Standard Recording Code) for exact matching
+  - **MusicBrainz MBID proxy** (ISRC → MusicBrainz → Plex MBID index)
+  - **Metadata fallback** (title/artist/album) when ISRC/MBID unavailable
 3. **Creates or updates** playlists in the destination service
 4. **Reports results** including matched, missing, and failed tracks
 
@@ -86,6 +87,32 @@ SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 |----------|-------------|
 | `PLEX_URL` | Your Plex server URL (e.g., `http://192.168.0.69:32400`) |
 | `PLEX_TOKEN` | Your Plex authentication token — [How to find it](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
+
+### Matching & Cache Options
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MUSICBRAINZ_ENABLED` | `1` | Enable ISRC → MusicBrainz → MBID proxy matching |
+| `MUSICBRAINZ_CACHE_TTL_DAYS` | `90` | Cache duration for successful ISRC lookups |
+| `MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS` | `7` | Cache duration for ISRCs not found in MusicBrainz |
+| `MUSICBRAINZ_API_KEY` | *(optional)* | Optional MusicBrainz API key (sent as a Bearer token) |
+| `PLEX_EXTENDED_CACHE_ENABLED` | `1` | Enable extended cache indexes for faster matching |
+| `PLEX_DURATION_BUCKET_SECONDS` | `5` | Duration bucket size used for matching heuristics |
+
+### Performance Tuning Recommendations
+
+These settings control Plex API throughput and local CPU usage. Start with the tier that best matches your hardware and adjust if you see timeouts or rate-limit warnings.
+
+| Hardware tier | Example devices | `MAX_REQUESTS_PER_SECOND` | `MAX_CONCURRENT_REQUESTS` | Notes |
+|---|---|---:|---:|---|
+| **Low-power** | Raspberry Pi 3/4, older mini PCs | 4–6 | 2–3 | Favor stability over speed; keep concurrency low. |
+| **Entry NAS** | Synology/QNAP (Celeron/Atom) | 6–8 | 3–4 | Increase only if CPU stays <70% and Plex remains responsive. |
+| **Mid-range** | Modern desktop CPU (4–8 cores) | 10–15 | 6–8 | Good default for most home servers. |
+| **High-end** | 12–24 core workstation/server | 15–25 | 8–12 | Watch Plex responsiveness during large syncs. |
+| **Cloud VM** | Azure T4 or similar | 12–18 | 6–10 | GPU doesn’t help this workload; tune based on CPU/RAM. |
+| **Large server** | 32+ cores, ample RAM | 20–30 | 12–16 | Use higher values only if Plex stays snappy. |
+
+> **Tip:** If you see Plex timeouts or slow UI response, reduce `MAX_CONCURRENT_REQUESTS` first, then lower `MAX_REQUESTS_PER_SECOND`.
 
 
 ## Service Configuration
@@ -293,6 +320,7 @@ All boolean options accept flexible values (case-insensitive):
 |----------|---------|-------------|
 | `PLEX_URL` | — | **Required.** Your Plex server URL (include `http://` or `https://`) |
 | `PLEX_TOKEN` | — | **Required.** Your Plex authentication token |
+| `DB_PATH` | `/app/data/plexist.db` | SQLite database path (mount `/app/data`) |
 | `SECONDS_TO_WAIT` | `84000` | Seconds between sync cycles |
 | `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `LOG_FORMAT` | `plain` | Log format (`plain` or `json`) |
@@ -347,7 +375,7 @@ docker run -d \
   -e SPOTIFY_CLIENT_ID=your-client-id \
   -e SPOTIFY_CLIENT_SECRET=your-client-secret \
   -e SPOTIFY_USER_ID=your-user-id \
-  -v /path/to/data:/app/data \
+  -v plexist-data:/app/data \
   gyarbij/plexist:latest
   # Or use: ghcr.io/gyarbij/plexist:latest
 ```
@@ -360,6 +388,7 @@ docker run -d \
   # === Core Settings ===
   -e PLEX_URL=http://192.168.0.2:32400 \
   -e PLEX_TOKEN=your-plex-token \
+  -e DB_PATH=/app/data/plexist.db \
   -e SECONDS_TO_WAIT=84000 \
   -e LOG_LEVEL=INFO \
   -e LOG_FORMAT=plain \
@@ -398,7 +427,7 @@ docker run -d \
   -e QOBUZ_USERNAME=your-email \
   -e QOBUZ_PASSWORD=your-password \
   # === Volume ===
-  -v /path/to/data:/app/data \
+  -v plexist-data:/app/data \
   gyarbij/plexist:latest
 ```
 
@@ -408,7 +437,7 @@ docker run -d \
 
 ### Docker Compose
 
-Create a `compose.yaml` file:
+Copy `assets/example.compose.yaml` to `compose.yaml`, then customize it:
 
 ```yaml
 services:
@@ -420,6 +449,7 @@ services:
       # === Core Settings ===
       PLEX_URL: http://192.168.0.2:32400
       PLEX_TOKEN: your-plex-token
+      DB_PATH: /app/data/plexist.db
       SECONDS_TO_WAIT: 84000
       LOG_LEVEL: INFO
       LOG_FORMAT: plain
@@ -436,6 +466,9 @@ services:
       # === Performance ===
       MAX_REQUESTS_PER_SECOND: 5
       MAX_CONCURRENT_REQUESTS: 4
+
+      # === MusicBrainz (optional) ===
+      # MUSICBRAINZ_API_KEY: your-musicbrainz-api-key
 
       # === Spotify (remove if not used) ===
       SPOTIFY_CLIENT_ID: your-client-id
@@ -467,7 +500,10 @@ services:
       # QOBUZ_PASSWORD: your-password
 
     volumes:
-      - ./data:/app/data  # For missing tracks, OAuth cache, and keys
+      - plexist-data:/app/data  # Named volume avoids UID permission issues
+
+volumes:
+  plexist-data:
 ```
 
 **Run with:**
@@ -475,6 +511,17 @@ services:
 ```bash
 docker compose up -d
 ```
+
+### Data Persistence
+
+The SQLite database is stored at `/app/data/plexist.db` inside the container. Use a **named volume** (recommended) for automatic permission handling:
+
+```yaml
+volumes:
+  - plexist-data:/app/data
+```
+
+> **Note:** The container runs as non-root user (UID 65532). Named volumes handle permissions automatically. For local development outside Docker, set `DB_PATH` environment variable to a writable location (e.g., `DB_PATH=./data/plexist.db`).
 
 <details>
 <summary><strong>Minimal Compose Example (Spotify Only)</strong></summary>
@@ -492,7 +539,10 @@ services:
       SPOTIFY_CLIENT_SECRET: your-client-secret
       SPOTIFY_USER_ID: your-user-id
     volumes:
-      - ./data:/app/data
+      - plexist-data:/app/data
+
+volumes:
+  plexist-data:
 ```
 
 </details>
@@ -510,7 +560,10 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      - plexist-data:/app/data
+
+volumes:
+  plexist-data:
 ```
 
 **.env:**

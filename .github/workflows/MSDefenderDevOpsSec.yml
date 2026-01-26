@@ -9,6 +9,8 @@ on:
 
 jobs:
   sample:
+    permissions:
+      contents: read
     # MSDO runs on windows-latest and ubuntu-latest.
     # macos-latest supporting coming soon
     runs-on: windows-latest

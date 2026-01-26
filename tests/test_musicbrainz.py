@@ -1,25 +1,30 @@
 """Tests for the MusicBrainz ISRC-to-MBID resolver module."""
 
 import os
-import tempfile
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Set test database path before importing
-TEST_DB_PATH = tempfile.mktemp(suffix=".db")
-os.environ["DB_PATH"] = TEST_DB_PATH
+@pytest.fixture(scope="session")
+def session_db_path(tmp_path_factory):
+    """Provide a session-scoped temp DB path with auto-cleanup."""
+    base_dir = tmp_path_factory.mktemp("musicbrainz_db")
+    db_path = base_dir / "test.db"
+    os.environ["DB_PATH"] = str(db_path)
+    return str(db_path)
 
 
 class TestMusicBrainzResolver:
     """Test suite for MusicBrainz resolver functionality."""
 
     @pytest.fixture(autouse=True)
-    def setup_test_db(self):
+    def setup_test_db(self, session_db_path):
         """Create a fresh test database for each test."""
-        # Use a unique temp file for each test
-        self.test_db = tempfile.mktemp(suffix=".db")
+        # Use a session-scoped temp path and reset the DB per test
+        self.test_db = session_db_path
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
         os.environ["DB_PATH"] = self.test_db
         
         # Import module after setting DB_PATH
@@ -190,9 +195,11 @@ class TestMusicBrainzAPI:
     """Test suite for MusicBrainz API interactions."""
 
     @pytest.fixture(autouse=True)
-    def setup_test_db(self):
+    def setup_test_db(self, session_db_path):
         """Create a fresh test database for each test."""
-        self.test_db = tempfile.mktemp(suffix=".db")
+        self.test_db = session_db_path
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
         os.environ["DB_PATH"] = self.test_db
         
         import importlib
@@ -277,9 +284,11 @@ class TestCacheTTL:
     """Test suite for cache TTL and expiration."""
 
     @pytest.fixture(autouse=True)
-    def setup_test_db(self):
+    def setup_test_db(self, session_db_path):
         """Create a fresh test database for each test."""
-        self.test_db = tempfile.mktemp(suffix=".db")
+        self.test_db = session_db_path
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
         os.environ["DB_PATH"] = self.test_db
         os.environ["MUSICBRAINZ_CACHE_TTL_DAYS"] = "90"
         os.environ["MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS"] = "7"
@@ -375,9 +384,11 @@ class TestMBIDConfidenceScoring:
     """Test suite for MBID confidence scoring functionality."""
 
     @pytest.fixture(autouse=True)
-    def setup_test_db(self):
+    def setup_test_db(self, session_db_path):
         """Create a fresh test database for each test."""
-        self.test_db = tempfile.mktemp(suffix=".db")
+        self.test_db = session_db_path
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
         os.environ["DB_PATH"] = self.test_db
         
         import importlib
@@ -511,9 +522,11 @@ class TestBatchISRCResolution:
     """Test suite for batch ISRC resolution functionality."""
 
     @pytest.fixture(autouse=True)
-    def setup_test_db(self):
+    def setup_test_db(self, session_db_path):
         """Create a fresh test database for each test."""
-        self.test_db = tempfile.mktemp(suffix=".db")
+        self.test_db = session_db_path
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
         os.environ["DB_PATH"] = self.test_db
         
         import importlib

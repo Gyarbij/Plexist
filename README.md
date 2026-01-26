@@ -99,6 +99,21 @@ SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 | `PLEX_EXTENDED_CACHE_ENABLED` | `1` | Enable extended cache indexes for faster matching |
 | `PLEX_DURATION_BUCKET_SECONDS` | `5` | Duration bucket size used for matching heuristics |
 
+### Performance Tuning Recommendations
+
+These settings control Plex API throughput and local CPU usage. Start with the tier that best matches your hardware and adjust if you see timeouts or rate-limit warnings.
+
+| Hardware tier | Example devices | `MAX_REQUESTS_PER_SECOND` | `MAX_CONCURRENT_REQUESTS` | Notes |
+|---|---|---:|---:|---|
+| **Low-power** | Raspberry Pi 3/4, older mini PCs | 4–6 | 2–3 | Favor stability over speed; keep concurrency low. |
+| **Entry NAS** | Synology/QNAP (Celeron/Atom) | 6–8 | 3–4 | Increase only if CPU stays <70% and Plex remains responsive. |
+| **Mid-range** | Modern desktop CPU (4–8 cores) | 10–15 | 6–8 | Good default for most home servers. |
+| **High-end** | 12–24 core workstation/server | 15–25 | 8–12 | Watch Plex responsiveness during large syncs. |
+| **Cloud VM** | Azure T4 or similar | 12–18 | 6–10 | GPU doesn’t help this workload; tune based on CPU/RAM. |
+| **Large server** | 32+ cores, ample RAM | 20–30 | 12–16 | Use higher values only if Plex stays snappy. |
+
+> **Tip:** If you see Plex timeouts or slow UI response, reduce `MAX_CONCURRENT_REQUESTS` first, then lower `MAX_REQUESTS_PER_SECOND`.
+
 
 ## Service Configuration
 

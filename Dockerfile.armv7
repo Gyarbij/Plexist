@@ -1,5 +1,5 @@
 # ---------- builder (arm/v7 with build tools for cffi) ----------
-FROM python:3.14.2-slim AS builder
+FROM python:3.14.3-slim AS builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1

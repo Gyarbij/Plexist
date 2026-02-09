@@ -93,7 +93,7 @@ six==1.17.0
     # via python-dateutil
 spotipy==2.25.2
     # via -r requirements.in
-tenacity==9.1.2
+tenacity==9.1.4
     # via -r requirements.in
 tidalapi==0.8.10
     # via -r requirements.in

@@ -27,7 +27,7 @@ charset-normalizer==3.4.9
     # via requests
 cryptography==49.0.0
     # via -r requirements.in
-deezer-python==7.3.0
+deezer-python==7.4.0
     # via -r requirements.in
 frozenlist==1.8.0
     # via

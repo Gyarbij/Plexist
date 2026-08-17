@@ -71,7 +71,7 @@ pydantic-core==2.46.4
     # via
     #   -r requirements.in
     #   pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via -r requirements.in
 pyjwt==2.13.0
     # via -r requirements.in

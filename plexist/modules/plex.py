@@ -39,6 +39,7 @@ DB_PATH = _resolve_db_path()
 PLEX_BATCH_SIZE = 500  # Number of tracks to fetch per Plex API request
 MAX_SEARCH_CANDIDATES = 500  # Maximum tracks to consider when no index match found
 HYDRATE_BATCH_SIZE = 100  # Matched cache entries fetched per /library/metadata request
+PLEX_POSITIVE_MATCH_SCORE = 85.0
 
 # Global rate limiter instance (aiolimiter)
 plex_rate_limiter = AsyncLimiter(5, 1)
@@ -711,6 +712,50 @@ async def _match_single_track(plex: PlexServer, track: Track) -> Tuple[Optional[
     return None, track
 
 
+async def _match_via_library_matches(
+    plex: PlexServer, track: Track, guid: str
+) -> Optional[plexapi.audio.Track]:
+    """Ask Plex to match an external track GUID against the local library."""
+    params = {
+        "type": 10,
+        "guid": guid,
+        "title": track.title,
+        "grandparentTitle": track.artist,
+        "parentTitle": track.album,
+        "includeFullMetadata": 0,
+    }
+    try:
+        await _acquire_rate_limit()
+        response = await asyncio.to_thread(
+            plex.query, "/library/matches", params=params
+        )
+    except Exception as e:
+        logging.debug("Plex library match failed for %s: %s", guid, e)
+        return None
+
+    candidates = []
+    for element in response.iter() if response is not None else ():
+        rating_key = element.attrib.get("ratingKey")
+        try:
+            score = float(element.attrib.get("score", ""))
+            parsed_rating_key = int(rating_key)
+        except (TypeError, ValueError):
+            continue
+        if score > PLEX_POSITIVE_MATCH_SCORE:
+            candidates.append((score, parsed_rating_key))
+
+    if not candidates:
+        return None
+
+    _, rating_key = max(candidates)
+    try:
+        await _acquire_rate_limit()
+        return await asyncio.to_thread(plex.fetchItem, rating_key)
+    except Exception as e:
+        logging.debug("Failed to fetch Plex library match %s for %s: %s", rating_key, guid, e)
+        return None
+
+
 def _describe_match(match: Any) -> str:
     if isinstance(match, CachedTrack):
         return f"'{match.title}' by '{match.artist}'"
@@ -770,25 +815,20 @@ async def _match_via_mbid_proxy(plex: PlexServer, track: Track) -> Optional[Any]
         )
         return best_match
 
-    # Fallback: try Plex GUID search for MBIDs not in index (with confidence ordering)
+    # Fallback: ask Plex's native matcher about MBIDs missing from the local index.
     for scored_mbid in scored_mbids:
         normalized_mbid = _normalize_mbid(scored_mbid.mbid)
         if not normalized_mbid:
             continue
-        try:
-            await _acquire_rate_limit()
-            results = await asyncio.to_thread(
-                plex.library.search, libtype="track", **{"track.guid": f"mbid://{normalized_mbid}"}
-            )
-        except Exception as e:
-            logging.debug("MBID fallback search failed for %s: %s", normalized_mbid, e)
-            continue
-        if results:
+        match = await _match_via_library_matches(
+            plex, track, f"mbid://{normalized_mbid}"
+        )
+        if match:
             logging.info(
                 "MBID proxy fallback match (confidence=%.2f): ISRC %s -> MBID %s -> %s",
-                scored_mbid.confidence, track.isrc, normalized_mbid, _describe_match(results[0]),
+                scored_mbid.confidence, track.isrc, normalized_mbid, _describe_match(match),
             )
-            return results[0]
+            return match
 
     return None
 

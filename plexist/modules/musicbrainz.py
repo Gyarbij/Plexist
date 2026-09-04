@@ -22,6 +22,8 @@ import aiohttp
 import aiosqlite
 from aiolimiter import AsyncLimiter
 
+from . import db
+
 # Configuration from environment with sensible defaults
 MUSICBRAINZ_CACHE_TTL_DAYS = int(os.getenv("MUSICBRAINZ_CACHE_TTL_DAYS", "90"))
 MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS = int(os.getenv("MUSICBRAINZ_NEGATIVE_CACHE_TTL_DAYS", "7"))
@@ -106,47 +108,13 @@ async def close_http_session() -> None:
 
 
 async def initialize_musicbrainz_db() -> None:
+    """Ensure the MusicBrainz cache tables exist (isrc_mbid_cache, plex_mbid_index).
+
+    The tables are part of the shared schema migrations; this applies any pending
+    migrations so the module also works when used on its own.
     """
-    Initialize the MusicBrainz cache tables in the database.
-    
-    Creates:
-    - isrc_mbid_cache: Maps ISRCs to MBIDs with caching timestamps
-    - plex_mbid_index: Stores Plex track MBIDs for fast in-memory loading
-    """
-    async with aiosqlite.connect(DB_PATH) as conn:
-        # ISRC to MBID mapping cache (from MusicBrainz API)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS isrc_mbid_cache (
-                isrc TEXT NOT NULL,
-                mbid TEXT,
-                is_negative INTEGER DEFAULT 0,
-                cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (isrc, mbid)
-            )
-        """)
-        # Index for TTL-based cleanup queries
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_isrc_mbid_cache_timestamp 
-            ON isrc_mbid_cache(cached_at, is_negative)
-        """)
-        
-        # Plex MBID index (persisted for fast startup)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS plex_mbid_index (
-                mbid TEXT PRIMARY KEY,
-                plex_id INTEGER NOT NULL,
-                track_key TEXT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        # Index for plex_id lookups
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_plex_mbid_plex_id 
-            ON plex_mbid_index(plex_id)
-        """)
-        
-        await conn.commit()
-        logging.info("MusicBrainz cache tables initialized")
+    await db.apply_migrations(DB_PATH)
+    logging.info("MusicBrainz cache tables initialized")
 
 
 async def cleanup_expired_cache() -> int:

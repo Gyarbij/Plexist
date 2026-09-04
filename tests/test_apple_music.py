@@ -9,12 +9,15 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "plexist"))
 
 from modules.apple_music import (
+    CATALOG_SONGS_BATCH_SIZE,
     AppleMusicClient,
     AppleMusicProvider,
     AppleMusicAuthError,
     AppleMusicAPIError,
     _extract_track_metadata,
     _extract_playlist_metadata,
+    _get_am_library_songs,
+    _get_am_tracks_from_playlist,
 )
 from modules.helperClasses import Playlist, Track, UserInputs
 
@@ -31,6 +34,40 @@ SAMPLE_TRACK_DATA = {
         "releaseDate": "2023-05-15",
         "playParams": {"catalogId": "123456789"},
     },
+}
+
+# Library song as returned with `include=catalog`: ISRC lives on the catalog song only.
+SAMPLE_CATALOG_SONG = {
+    "id": "123456789",
+    "type": "songs",
+    "attributes": {
+        "name": "Test Song",
+        "artistName": "Test Artist",
+        "albumName": "Test Album",
+        "isrc": "USUM72300123",
+        "url": "https://music.apple.com/us/album/test-song/1000?i=123456789",
+        "releaseDate": "2023-05-15",
+        "genreNames": ["Pop"],
+        "durationInMillis": 215000,
+    },
+}
+
+SAMPLE_TRACK_WITH_CATALOG = {
+    "id": "i.XYZ123",
+    "type": "library-songs",
+    "attributes": {
+        "name": "Test Song",
+        "artistName": "Test Artist",
+        "albumName": "Test Album",
+        "playParams": {"catalogId": "123456789"},
+    },
+    "relationships": {"catalog": {"data": [SAMPLE_CATALOG_SONG]}},
+}
+
+SAMPLE_MUSIC_VIDEO_DATA = {
+    "id": "i.VID456",
+    "type": "library-music-videos",
+    "attributes": {"name": "Test Video", "artistName": "Test Artist"},
 }
 
 SAMPLE_PLAYLIST_DATA = {
@@ -152,6 +189,121 @@ class TestExtractTrackMetadata:
         
         assert track.title == "Unknown"
         assert track.artist == "Unknown"
+
+    def test_extract_isrc_and_details_from_catalog_relationship(self):
+        track = _extract_track_metadata(SAMPLE_TRACK_WITH_CATALOG)
+
+        assert track.isrc == "USUM72300123"
+        assert track.url == "https://music.apple.com/us/album/test-song/1000?i=123456789"
+        assert track.year == "2023"
+        assert track.genre == "Pop"
+        assert track.duration_ms == 215000
+
+    def test_library_song_without_catalog_has_no_isrc(self):
+        track = _extract_track_metadata(SAMPLE_TRACK_DATA)
+
+        assert track.isrc is None
+        assert track.url == "https://music.apple.com/song/123456789"
+
+
+class TestCatalogEnrichment:
+    """Tests for include=catalog requests and the batched catalog fallback."""
+
+    def _client(self):
+        client = AppleMusicClient(
+            team_id="TEAM123", key_id="KEY456", private_key="test-key", user_token="user-token"
+        )
+        client._developer_token = "dev-token"
+        client._token_expiry = time.time() + 3600
+        return client
+
+    @pytest.mark.asyncio
+    async def test_library_endpoints_request_catalog_relationship(self):
+        client = self._client()
+
+        with patch.object(
+            client, "_request", new_callable=AsyncMock, return_value={"data": [SAMPLE_TRACK_WITH_CATALOG]}
+        ) as request:
+            await client.get_playlist_tracks("p.ABC123")
+            await client.get_library_songs()
+
+        for call in request.await_args_list:
+            assert call.kwargs["params"]["include"] == "catalog"
+        assert request.await_args_list[0].args[1] == "/me/library/playlists/p.ABC123/tracks"
+        assert request.await_args_list[1].args[1] == "/me/library/songs"
+
+    @pytest.mark.asyncio
+    async def test_missing_catalog_relationship_is_filled_from_catalog_lookup(self):
+        client = self._client()
+        client._storefront = "us"
+        item = {"id": "i.1", "type": "library-songs", "attributes": {"playParams": {"catalogId": "123456789"}}}
+
+        with patch.object(
+            client, "get_catalog_songs", new_callable=AsyncMock, return_value={"123456789": SAMPLE_CATALOG_SONG}
+        ) as lookup:
+            await client.attach_catalog_metadata([item, dict(SAMPLE_TRACK_WITH_CATALOG)])
+
+        lookup.assert_awaited_once_with("us", ["123456789"])
+        assert _extract_track_metadata(item).isrc == "USUM72300123"
+
+    @pytest.mark.asyncio
+    async def test_storefront_is_resolved_once_when_not_configured(self):
+        client = self._client()
+
+        with patch.object(
+            client, "get_user_storefront", new_callable=AsyncMock, return_value="gb"
+        ) as storefront, patch.object(
+            client, "get_catalog_songs", new_callable=AsyncMock, return_value={}
+        ) as lookup:
+            await client.attach_catalog_metadata([dict(SAMPLE_TRACK_DATA)])
+            await client.attach_catalog_metadata([dict(SAMPLE_TRACK_DATA)])
+
+        storefront.assert_awaited_once()
+        assert [call.args[0] for call in lookup.await_args_list] == ["gb", "gb"]
+
+    @pytest.mark.asyncio
+    async def test_catalog_lookup_failure_is_non_fatal(self):
+        client = self._client()
+        client._storefront = "us"
+        item = dict(SAMPLE_TRACK_DATA)
+
+        with patch.object(
+            client, "get_catalog_songs", new_callable=AsyncMock, side_effect=AppleMusicAPIError("boom")
+        ):
+            await client.attach_catalog_metadata([item])
+
+        assert "relationships" not in item
+
+    @pytest.mark.asyncio
+    async def test_get_catalog_songs_batches_ids(self):
+        client = self._client()
+        ids = [str(i) for i in range(CATALOG_SONGS_BATCH_SIZE + 5)]
+
+        async def fake_request(method, endpoint, include_user_token=True, params=None):
+            assert include_user_token is False
+            assert endpoint == "/catalog/us/songs"
+            return {"data": [{"id": song_id, "type": "songs"} for song_id in params["ids"].split(",")]}
+
+        with patch.object(client, "_request", side_effect=fake_request) as request:
+            songs = await client.get_catalog_songs("us", ids)
+
+        assert request.call_count == 2
+        assert len(request.call_args_list[0].kwargs["params"]["ids"].split(",")) == CATALOG_SONGS_BATCH_SIZE
+        assert set(songs) == set(ids)
+
+    @pytest.mark.asyncio
+    async def test_non_song_items_are_skipped(self):
+        client = MagicMock()
+        client.get_playlist_tracks = AsyncMock(return_value=[SAMPLE_TRACK_WITH_CATALOG, SAMPLE_MUSIC_VIDEO_DATA])
+        client.get_library_songs = AsyncMock(return_value=[SAMPLE_MUSIC_VIDEO_DATA, SAMPLE_TRACK_DATA])
+
+        playlist_tracks = await _get_am_tracks_from_playlist(
+            client, Playlist(id="p.1", name="P", description="", poster="")
+        )
+        library_tracks = await _get_am_library_songs(client)
+
+        assert [t.title for t in playlist_tracks] == ["Test Song"]
+        assert [t.title for t in library_tracks] == ["Test Song"]
 
 
 class TestExtractPlaylistMetadata:
@@ -341,7 +493,9 @@ class TestAppleMusicClientAPI:
             "next": None,
         })
         
-        with patch.object(client, "_get_session") as mock_get_session:
+        with patch.object(client, "_get_session") as mock_get_session, patch.object(
+            client, "attach_catalog_metadata", new_callable=AsyncMock
+        ) as enrich:
             mock_session = MagicMock()
             mock_session.request = MagicMock(return_value=async_cm)
             mock_get_session.return_value = mock_session
@@ -350,6 +504,8 @@ class TestAppleMusicClientAPI:
         
         assert len(songs) == 1
         assert songs[0]["attributes"]["name"] == "Test Song"
+        assert mock_session.request.call_args.kwargs["params"]["include"] == "catalog"
+        enrich.assert_awaited_once_with(songs)
 
     @pytest.mark.asyncio
     async def test_request_handles_401_error(self, mock_aiohttp_response):

@@ -39,6 +39,10 @@ class MusicServiceProvider(ABC):
     async def sync(self, plex, user_inputs: UserInputs) -> None:
         """Legacy sync method - syncs to Plex. Kept for backwards compatibility."""
         raise NotImplementedError
+
+    async def get_liked_tracks(self, user_inputs: UserInputs) -> List[Track]:
+        """Fetch the user's liked/favorited tracks. Services without the concept return []."""
+        return []
     
     # ============================================================
     # Write capability methods (optional - only for providers with supports_write=True)

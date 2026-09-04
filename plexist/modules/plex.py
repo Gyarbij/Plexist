@@ -498,13 +498,13 @@ async def warm_mbid_cache_for_tracks(tracks: List[Track]) -> int:
     if not isrcs:
         return 0
     
-    logging.info(f"Pre-warming MBID cache for {len(isrcs)} ISRCs from {len(tracks)} tracks")
+    logging.info("Pre-warming MBID cache for %d ISRCs from %d tracks", len(isrcs), len(tracks))
     
     try:
         fetched = await musicbrainz.warm_cache_for_isrcs(isrcs)
         return fetched
     except Exception as e:
-        logging.error(f"Error warming MBID cache: {e}")
+        logging.error("Error warming MBID cache: %s", e)
         return 0
 
 
@@ -792,7 +792,7 @@ async def _match_via_mbid_proxy(plex: PlexServer, track: Track) -> Optional[plex
     scored_mbids = await musicbrainz.get_mbids_for_isrc_with_scores(track.isrc)
     
     if not scored_mbids:
-        logging.debug(f"No MBIDs found for ISRC {track.isrc}")
+        logging.debug("No MBIDs found for ISRC %s", track.isrc)
         return None
     
     # Track the best match found and its confidence
@@ -854,7 +854,7 @@ async def _match_via_mbid_proxy(plex: PlexServer, track: Track) -> Optional[plex
                                     )
                                     return best_match
                         except Exception as e:
-                            logging.debug(f"Failed to fetch Plex track {plex_id}: {e}")
+                            logging.debug("Failed to fetch Plex track %s: %s", plex_id, e)
     
     # Return best match found from index (if any)
     if best_match:
@@ -938,7 +938,9 @@ async def configure_rate_limiting(user_inputs: UserInputs) -> None:
     plex_rate_limiter = AsyncLimiter(user_inputs.max_requests_per_second, 1)
     max_concurrent_workers = user_inputs.max_concurrent_requests
     logging.info(
-        f"Rate limiting configured: {user_inputs.max_requests_per_second} req/s, {user_inputs.max_concurrent_requests} concurrent workers"
+        "Rate limiting configured: %s req/s, %d concurrent workers",
+        user_inputs.max_requests_per_second,
+        user_inputs.max_concurrent_requests,
     )
 
 async def get_matched_song(title, artist, album):
@@ -984,10 +986,11 @@ async def update_or_create_plex_playlist(
     playlist: Playlist,
     tracks: List[Track],
     userInputs: UserInputs,
-) -> None:
+) -> Tuple[int, int]:
+    """Sync a playlist into Plex and return (matched, missing) track counts."""
     if not tracks:
         logging.error("No tracks provided for playlist %s", playlist.name)
-        return
+        return 0, 0
 
     available_tracks, missing_tracks = await _get_available_plex_tracks(plex, tracks)
 
@@ -1051,6 +1054,8 @@ async def update_or_create_plex_playlist(
                     logging.info("Deleted old %s.json as no missing tracks found", playlist.name)
                 except Exception as e:
                     logging.error("Failed to delete %s.json: %s", playlist.name, str(e))
+
+    return len(available_tracks), len(missing_tracks)
 
 def _write_csv(tracks: List[Track], name: str, path: str = "/data") -> None:
     data_folder = pathlib.Path(path)
@@ -1288,14 +1293,22 @@ class PlexProvider(MusicServiceProvider):
     name = "plex"
     supports_read = True
     supports_write = True
+
+    def __init__(self) -> None:
+        self._server: Optional[PlexServer] = None
+        self._server_key: Optional[Tuple[Optional[str], Optional[str]]] = None
     
     def is_configured(self, user_inputs: UserInputs) -> bool:
         """Check if Plex is properly configured."""
         return bool(user_inputs.plex_url and user_inputs.plex_token)
     
     def _get_server(self, user_inputs: UserInputs) -> PlexServer:
-        """Create a Plex server connection."""
-        return PlexServer(user_inputs.plex_url, user_inputs.plex_token)
+        """Return a PlexServer connection, reusing it across calls for the same credentials."""
+        key = (user_inputs.plex_url, user_inputs.plex_token)
+        if self._server is None or self._server_key != key:
+            self._server = PlexServer(user_inputs.plex_url, user_inputs.plex_token)
+            self._server_key = key
+        return self._server
     
     async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
         """Fetch all playlists from Plex library."""
@@ -1397,31 +1410,10 @@ class PlexProvider(MusicServiceProvider):
     ) -> Optional[str]:
         """Search for a track in Plex library and return its ratingKey.
         
-        Uses ISRC for exact matching when available in both source track
-        and Plex metadata, falls back to existing fuzzy matching logic.
+        Delegates to the shared matching pipeline, whose first stage is an exact
+        ISRC lookup followed by MusicBrainz MBID and metadata fallbacks.
         """
         plex = self._get_server(user_inputs)
-        
-        # First try ISRC-based matching if available
-        if track.isrc:
-            try:
-                await _acquire_rate_limit()
-                # Search by ISRC in Plex's external IDs
-                results = await asyncio.to_thread(
-                    plex.library.search,
-                    libtype="track",
-                    **{"track.guid": f"isrc://{track.isrc}"}
-                )
-                if results:
-                    logging.debug(
-                        "Found Plex track by ISRC %s: %s",
-                        track.isrc, results[0].ratingKey
-                    )
-                    return str(results[0].ratingKey)
-            except Exception as e:
-                logging.debug("ISRC search failed in Plex: %s", e)
-        
-        # Fall back to existing fuzzy matching
         plex_track, _ = await _match_single_track(plex, track)
         if plex_track:
             return str(plex_track.ratingKey)

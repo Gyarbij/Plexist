@@ -72,7 +72,7 @@ SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 3. **Creates or updates** playlists in the destination service
 4. **Reports results** including matched, missing, and failed tracks
 
-> **💡 Note:** When `SYNC_PAIRS` is configured, it replaces the default Plex-centric sync behavior. To sync to Plex, include it as a destination (e.g., `spotify:plex`).
+> **💡 Note:** When `SYNC_PAIRS` is configured, it replaces the default Plex-centric sync behavior. To sync to Plex, include it as a destination (e.g., `spotify:plex`). Plex destinations use the full Plex pipeline: cached matching, playlist posters/descriptions, missing-track CSV/JSON exports and `SYNC_LIKED_TRACKS`.
 
 ## What it will NOT do:
 
@@ -120,28 +120,46 @@ These settings control Plex API throughput and local CPU usage. Start with the t
 <details>
 <summary><strong>🟢 Spotify</strong></summary>
 
+Spotify's Web API only serves user playlists through a **user-authorized token**, and apps created since late 2024 stay in *Development Mode*. Plexist therefore signs you in with OAuth once, then caches the refresh token in `/app/data`.
+
 ### Requirements
-- **Client ID & Secret** — Get from [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/login)
-- **User ID** — Found on your [Spotify Account Page](https://www.spotify.com/account/overview/)
+- A Spotify **Premium** account (required for the owner of a Development Mode app)
+- An app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard):
+  1. **Create app** → note the **Client ID** and **Client Secret**
+  2. Add the redirect URI `http://127.0.0.1:8888/callback` (Spotify rejects `localhost`; use the loopback IP or an `https://` URL). It must match `SPOTIFY_REDIRECT_URI` exactly.
+  3. If the Spotify account you sync is **not** the app owner, add it under **Settings → User Management** (Development Mode allows up to 5 users). Accounts that are not on this list get `403 Forbidden`.
 
-### Liked Tracks Sync (Optional)
+### First-Run Authorization
 
-To sync your Spotify liked/saved tracks to Plex ratings, set up OAuth authentication:
+1. Start the container. The log prints an `https://accounts.spotify.com/authorize?...` URL.
+2. Open it in a browser while logged in to the Spotify account you want to sync and approve access.
+3. The browser is redirected to `http://127.0.0.1:8888/callback?code=...` — the page will not load; that is expected. Copy the **full URL** from the address bar.
+4. Provide it to Plexist either way:
+   - set `SPOTIFY_AUTH_RESPONSE=<pasted URL>` and restart the container, **or**
+   - write it to `/app/data/spotify_auth_response.txt` inside the data volume (Plexist polls this file for a few minutes after printing the URL).
+5. The token is cached at `/app/data/.spotify_cache` and refreshed automatically. Remove `SPOTIFY_AUTH_RESPONSE` afterwards — authorization codes are single-use.
 
-1. Go to your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Select your app → **Edit Settings**
-3. Add a Redirect URI (e.g., `http://localhost:8888/callback`)
-4. Set the `SPOTIFY_REDIRECT_URI` environment variable to match
-5. On first run, authorize the app (check container logs for the URL)
-6. Mount `.spotify_cache` as a volume to persist OAuth tokens
+Running outside Docker with a terminal attached? Plexist prompts for the URL interactively instead.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SPOTIFY_CLIENT_ID` | ✅ | Your Spotify app Client ID |
 | `SPOTIFY_CLIENT_SECRET` | ✅ | Your Spotify app Client Secret |
-| `SPOTIFY_USER_ID` | ✅ | Your Spotify user ID |
-| `SPOTIFY_REDIRECT_URI` | For liked tracks | OAuth redirect URI (e.g., `http://localhost:8888/callback`) |
-| `SPOTIFY_CACHE_PATH` | Optional | Path to cache OAuth tokens (e.g., `/app/data/.spotify_cache`) |
+| `SPOTIFY_REDIRECT_URI` | Optional | Redirect URI registered for the app (default: `http://127.0.0.1:8888/callback`) |
+| `SPOTIFY_AUTH_RESPONSE` | First run | The redirected URL (or just the `code`) from the authorization step |
+| `SPOTIFY_CACHE_PATH` | Optional | Token cache file (default: `.spotify_cache` next to `DB_PATH`) |
+| `SPOTIFY_USER_ID` | Optional | Only sync playlists **owned** by this user ID (followed playlists are skipped). Leave unset to sync every playlist in the library. |
+
+Liked tracks (`SYNC_LIKED_TRACKS`) use the same token; no extra setup is needed.
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `Spotify authorization required` on every cycle | Complete the first-run steps above; check that `/app/data` is a persistent volume so the cache survives restarts. |
+| `HTTP 403` / `Forbidden` | The authorized account is not the app owner or not in **User Management**, the owner account is not Premium, or the redirect URI does not match the dashboard. |
+| `Spotify rejected the authorization response` | The pasted code was already used or expired. Clear `SPOTIFY_AUTH_RESPONSE`, delete `spotify_auth_response.txt`, and authorize again with the newly logged URL. |
+| Redirect URI errors in the browser | Make sure the dashboard entry uses `http://127.0.0.1:8888/callback`, not `localhost`. |
 
 </details>
 
@@ -215,6 +233,8 @@ To use Deezer as a sync destination (e.g., `SYNC_PAIRS=spotify:deezer`), you nee
 | `APPLE_MUSIC_RETRY_BACKOFF_SECONDS` | Optional | Retry backoff (default: `1.0`) |
 
 > **💡 Public Playlist Mode:** Omit `APPLE_MUSIC_USER_TOKEN` and set `APPLE_MUSIC_PUBLIC_PLAYLIST_IDS` + `APPLE_MUSIC_STOREFRONT` to sync only public playlists.
+
+> **💡 Matching:** Library items are fetched with their catalog counterpart (`include=catalog`), so ISRCs are available for exact Plex/MusicBrainz matching. Music videos in playlists are skipped.
 
 </details>
 
@@ -374,7 +394,6 @@ docker run -d \
   -e MAX_CONCURRENT_REQUESTS=4 \
   -e SPOTIFY_CLIENT_ID=your-client-id \
   -e SPOTIFY_CLIENT_SECRET=your-client-secret \
-  -e SPOTIFY_USER_ID=your-user-id \
   -v plexist-data:/app/data \
   gyarbij/plexist:latest
   # Or use: ghcr.io/gyarbij/plexist:latest
@@ -405,8 +424,9 @@ docker run -d \
   # === Spotify ===
   -e SPOTIFY_CLIENT_ID=your-client-id \
   -e SPOTIFY_CLIENT_SECRET=your-client-secret \
+  -e SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback \
+  -e SPOTIFY_AUTH_RESPONSE= \
   -e SPOTIFY_USER_ID=your-user-id \
-  -e SPOTIFY_REDIRECT_URI=http://localhost:8888/callback \
   -e SPOTIFY_CACHE_PATH=/app/data/.spotify_cache \
   # === Deezer ===
   -e DEEZER_USER_ID=your-user-id \
@@ -473,8 +493,9 @@ services:
       # === Spotify (remove if not used) ===
       SPOTIFY_CLIENT_ID: your-client-id
       SPOTIFY_CLIENT_SECRET: your-client-secret
-      SPOTIFY_USER_ID: your-user-id
-      # SPOTIFY_REDIRECT_URI: http://localhost:8888/callback
+      # SPOTIFY_REDIRECT_URI: http://127.0.0.1:8888/callback  # Must match the Developer Dashboard
+      # SPOTIFY_AUTH_RESPONSE:  # First run only: paste the redirected URL from the logged authorize link
+      # SPOTIFY_USER_ID: your-user-id  # Optional: only sync playlists owned by this user
       # SPOTIFY_CACHE_PATH: /app/data/.spotify_cache
 
       # === Deezer (remove if not used) ===
@@ -537,7 +558,6 @@ services:
       PLEX_TOKEN: your-plex-token
       SPOTIFY_CLIENT_ID: your-client-id
       SPOTIFY_CLIENT_SECRET: your-client-secret
-      SPOTIFY_USER_ID: your-user-id
     volumes:
       - plexist-data:/app/data
 
@@ -572,7 +592,6 @@ PLEX_URL=http://192.168.0.2:32400
 PLEX_TOKEN=your-plex-token
 SPOTIFY_CLIENT_ID=your-client-id
 SPOTIFY_CLIENT_SECRET=your-client-secret
-SPOTIFY_USER_ID=your-user-id
 ```
 
 </details>
@@ -582,6 +601,9 @@ SPOTIFY_USER_ID=your-user-id
 ```bash
 # Install dev dependencies
 pip3 install -r requirements-dev.txt
+
+# Lint
+ruff check .
 
 # Run tests
 pytest

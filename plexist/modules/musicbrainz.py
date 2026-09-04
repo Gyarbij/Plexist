@@ -172,7 +172,7 @@ async def cleanup_expired_cache() -> int:
         await conn.commit()
         
         if deleted_count > 0:
-            logging.info(f"Cleaned up {deleted_count} expired ISRC cache entries")
+            logging.info("Cleaned up %d expired ISRC cache entries", deleted_count)
         
         return deleted_count
 
@@ -305,7 +305,7 @@ async def query_musicbrainz_api_with_scores(isrc: str) -> Set[ScoredMBID]:
         try:
             async with session.get(url, params=params, timeout=10) as response:
                 if response.status == 404:
-                    logging.debug(f"ISRC {isrc} not found in MusicBrainz")
+                    logging.debug("ISRC %s not found in MusicBrainz", isrc)
                     return set()
                 
                 if response.status == 503:
@@ -362,21 +362,23 @@ async def query_musicbrainz_api_with_scores(isrc: str) -> Set[ScoredMBID]:
                                         ))
                 
                 logging.debug(
-                    f"MusicBrainz returned {len(scored_mbids)} MBIDs for ISRC {isrc} "
-                    f"(recordings: {sum(1 for m in scored_mbids if m.mbid_type == MBIDType.RECORDING)}, "
-                    f"tracks: {sum(1 for m in scored_mbids if m.mbid_type == MBIDType.RELEASE_TRACK)}, "
-                    f"releases: {sum(1 for m in scored_mbids if m.mbid_type == MBIDType.RELEASE)})"
+                    "MusicBrainz returned %d MBIDs for ISRC %s (recordings: %d, tracks: %d, releases: %d)",
+                    len(scored_mbids),
+                    isrc,
+                    sum(1 for m in scored_mbids if m.mbid_type == MBIDType.RECORDING),
+                    sum(1 for m in scored_mbids if m.mbid_type == MBIDType.RELEASE_TRACK),
+                    sum(1 for m in scored_mbids if m.mbid_type == MBIDType.RELEASE),
                 )
                 return scored_mbids
                 
         except asyncio.TimeoutError:
-            logging.warning(f"MusicBrainz API timeout for ISRC {isrc}")
+            logging.warning("MusicBrainz API timeout for ISRC %s", isrc)
             return set()
         except aiohttp.ClientError as e:
-            logging.error(f"MusicBrainz API error for ISRC {isrc}: {e}")
+            logging.error("MusicBrainz API error for ISRC %s: %s", isrc, e)
             return set()
         except Exception as e:
-            logging.error(f"Unexpected error querying MusicBrainz for {isrc}: {e}")
+            logging.error("Unexpected error querying MusicBrainz for %s: %s", isrc, e)
             return set()
 
 
@@ -402,7 +404,7 @@ async def get_mbids_for_isrc_with_scores(isrc: str) -> List[ScoredMBID]:
     # Check cache first - cache stores plain MBIDs, we'll assign default scores
     cached = await get_cached_mbids(isrc)
     if cached is not None:
-        logging.debug(f"Cache hit for ISRC {isrc}: {len(cached)} MBIDs")
+        logging.debug("Cache hit for ISRC %s: %d MBIDs", isrc, len(cached))
         # For cached entries, we don't have type info, use UNKNOWN type
         scored = [
             ScoredMBID(
@@ -415,7 +417,7 @@ async def get_mbids_for_isrc_with_scores(isrc: str) -> List[ScoredMBID]:
         return sorted(scored, key=lambda x: x.confidence, reverse=True)
     
     # Query MusicBrainz API with scores
-    logging.debug(f"Cache miss for ISRC {isrc}, querying MusicBrainz")
+    logging.debug("Cache miss for ISRC %s, querying MusicBrainz", isrc)
     scored_mbids = await query_musicbrainz_api_with_scores(isrc)
     
     # Cache the plain MBIDs (cache doesn't store type info currently)
@@ -450,11 +452,11 @@ async def get_mbids_for_isrc(isrc: str) -> Set[str]:
     # Check cache first
     cached = await get_cached_mbids(isrc)
     if cached is not None:
-        logging.debug(f"Cache hit for ISRC {isrc}: {len(cached)} MBIDs")
+        logging.debug("Cache hit for ISRC %s: %d MBIDs", isrc, len(cached))
         return cached
     
     # Query MusicBrainz API
-    logging.debug(f"Cache miss for ISRC {isrc}, querying MusicBrainz")
+    logging.debug("Cache miss for ISRC %s, querying MusicBrainz", isrc)
     mbids = await query_musicbrainz_api(isrc)
     mbids = _normalize_mbids(mbids)
     
@@ -500,7 +502,7 @@ async def load_plex_mbid_index() -> dict:
             async for row in cursor:
                 index[row[0]] = {"plex_id": row[1], "track_key": row[2]}
     
-    logging.info(f"Loaded {len(index)} entries from Plex MBID index")
+    logging.info("Loaded %d entries from Plex MBID index", len(index))
     return index
 
 
@@ -537,7 +539,7 @@ async def save_plex_mbids_bulk(entries: list) -> None:
             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
         """, entries)
         await conn.commit()
-        logging.debug(f"Bulk saved {len(entries)} entries to Plex MBID index")
+        logging.debug("Bulk saved %d entries to Plex MBID index", len(entries))
 
 
 async def remove_plex_mbid_from_index(plex_id: int) -> None:
@@ -696,13 +698,15 @@ async def get_mbids_for_isrcs_batch(isrcs: List[str]) -> Dict[str, Set[str]]:
         cached = cache_results.get(isrc)
         if cached is not None:
             results[isrc] = cached
-            logging.debug(f"Batch cache hit for ISRC {isrc}: {len(cached)} MBIDs")
+            logging.debug("Batch cache hit for ISRC %s: %d MBIDs", isrc, len(cached))
         else:
             cache_misses.append(isrc)
     
     logging.info(
-        f"Batch ISRC lookup: {len(normalized_isrcs)} ISRCs, "
-        f"{len(results)} cache hits, {len(cache_misses)} cache misses"
+        "Batch ISRC lookup: %d ISRCs, %d cache hits, %d cache misses",
+        len(normalized_isrcs),
+        len(results),
+        len(cache_misses),
     )
     
     # Query MusicBrainz API for cache misses (respecting rate limits)
@@ -760,13 +764,15 @@ async def get_mbids_for_isrcs_batch_with_scores(
                 for mbid in cached
             ]
             results[isrc] = sorted(scored, key=lambda x: x.confidence, reverse=True)
-            logging.debug(f"Batch cache hit for ISRC {isrc}: {len(cached)} MBIDs")
+            logging.debug("Batch cache hit for ISRC %s: %d MBIDs", isrc, len(cached))
         else:
             cache_misses.append(isrc)
     
     logging.info(
-        f"Batch ISRC lookup (with scores): {len(normalized_isrcs)} ISRCs, "
-        f"{len(results)} cache hits, {len(cache_misses)} cache misses"
+        "Batch ISRC lookup (with scores): %d ISRCs, %d cache hits, %d cache misses",
+        len(normalized_isrcs),
+        len(results),
+        len(cache_misses),
     )
     
     # Query MusicBrainz API for cache misses with full scoring
@@ -807,9 +813,10 @@ async def warm_cache_for_isrcs(isrcs: List[str]) -> int:
     cache_misses = [isrc for isrc in normalized_isrcs if cache_results.get(isrc) is None]
     
     logging.info(
-        f"Cache warming: {len(normalized_isrcs)} ISRCs, "
-        f"{len(normalized_isrcs) - len(cache_misses)} already cached, "
-        f"{len(cache_misses)} to fetch"
+        "Cache warming: %d ISRCs, %d already cached, %d to fetch",
+        len(normalized_isrcs),
+        len(normalized_isrcs) - len(cache_misses),
+        len(cache_misses),
     )
     
     # Fetch and cache misses (respecting rate limits)
@@ -821,7 +828,7 @@ async def warm_cache_for_isrcs(isrcs: List[str]) -> int:
         fetched += 1
         
         if fetched % 50 == 0:
-            logging.info(f"Cache warming progress: {fetched}/{len(cache_misses)} ISRCs fetched")
+            logging.info("Cache warming progress: %d/%d ISRCs fetched", fetched, len(cache_misses))
     
-    logging.info(f"Cache warming complete: {fetched} new ISRCs cached")
+    logging.info("Cache warming complete: %d new ISRCs cached", fetched)
     return fetched

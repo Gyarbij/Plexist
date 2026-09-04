@@ -14,7 +14,7 @@ Requirements:
 import asyncio
 import logging
 import time
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import aiohttp
 import jwt
@@ -27,6 +27,10 @@ from .plex import update_or_create_plex_playlist, sync_liked_tracks_to_plex
 
 # Apple Music API base URL
 APPLE_MUSIC_API_BASE = "https://api.music.apple.com/v1"
+# Maximum number of ids accepted by GET /catalog/{storefront}/songs?ids=
+CATALOG_SONGS_BATCH_SIZE = 300
+# Resource types that represent syncable audio tracks (music videos etc. are skipped)
+SONG_TYPES = ("library-songs", "songs")
 
 
 class AppleMusicClient:
@@ -42,6 +46,7 @@ class AppleMusicClient:
         request_timeout_seconds: int = 10,
         max_retries: int = 3,
         retry_backoff_seconds: float = 1.0,
+        storefront: Optional[str] = None,
     ):
         self.team_id = team_id
         self.key_id = key_id
@@ -51,6 +56,7 @@ class AppleMusicClient:
         self.request_timeout_seconds = request_timeout_seconds
         self.max_retries = max_retries
         self.retry_backoff_seconds = retry_backoff_seconds
+        self._storefront = storefront
         self._developer_token: Optional[str] = None
         self._token_expiry: float = 0
         self._session: Optional[aiohttp.ClientSession] = None
@@ -239,12 +245,16 @@ class AppleMusicClient:
         return playlists
     
     async def get_playlist_tracks(self, playlist_id: str, limit: int = 100) -> List[dict]:
-        """Fetch all tracks from a library playlist with pagination."""
+        """Fetch all tracks from a library playlist with pagination.
+
+        Library items carry no ISRC themselves; `include=catalog` attaches the matching
+        catalog song (ISRC, URL, release date, genres) as a relationship.
+        """
         tracks = []
         offset = 0
         
         while True:
-            params = {"limit": limit, "offset": offset}
+            params = {"limit": limit, "offset": offset, "include": "catalog"}
             response = await self._request(
                 "GET",
                 f"/me/library/playlists/{playlist_id}/tracks",
@@ -262,6 +272,7 @@ class AppleMusicClient:
             else:
                 break
         
+        await self.attach_catalog_metadata(tracks)
         return tracks
     
     async def get_library_songs(self, limit: int = 100) -> List[dict]:
@@ -273,7 +284,7 @@ class AppleMusicClient:
         offset = 0
         
         while True:
-            params = {"limit": limit, "offset": offset}
+            params = {"limit": limit, "offset": offset, "include": "catalog"}
             response = await self._request("GET", "/me/library/songs", params=params)
             
             data = response.get("data", [])
@@ -287,7 +298,61 @@ class AppleMusicClient:
             else:
                 break
         
+        await self.attach_catalog_metadata(songs)
         return songs
+
+    async def get_catalog_songs(self, storefront: str, ids: List[str]) -> Dict[str, dict]:
+        """Fetch catalog songs by id (batched); returns a mapping of catalog id -> song."""
+        songs: Dict[str, dict] = {}
+        for start in range(0, len(ids), CATALOG_SONGS_BATCH_SIZE):
+            chunk = ids[start:start + CATALOG_SONGS_BATCH_SIZE]
+            response = await self._request(
+                "GET",
+                f"/catalog/{storefront}/songs",
+                include_user_token=False,
+                params={"ids": ",".join(chunk)},
+            )
+            for song in response.get("data", []):
+                if song.get("id"):
+                    songs[str(song["id"])] = song
+        return songs
+
+    async def _resolve_storefront(self) -> str:
+        if not self._storefront:
+            self._storefront = await self.get_user_storefront()
+        return self._storefront
+
+    async def attach_catalog_metadata(self, items: List[dict]) -> None:
+        """Fill in the catalog relationship for library items that came back without one."""
+        pending: Dict[str, List[dict]] = {}
+        for item in items:
+            if _catalog_attributes(item):
+                continue
+            catalog_id = ((item.get("attributes") or {}).get("playParams") or {}).get("catalogId")
+            if catalog_id:
+                pending.setdefault(str(catalog_id), []).append(item)
+        if not pending:
+            return
+
+        try:
+            storefront = await self._resolve_storefront()
+            songs = await self.get_catalog_songs(storefront, list(pending))
+        except (AppleMusicAuthError, AppleMusicAPIError) as e:
+            logging.debug(
+                "Could not resolve catalog metadata for %d Apple Music library item(s): %s",
+                len(pending),
+                e,
+            )
+            return
+
+        for catalog_id, song in songs.items():
+            for item in pending.get(catalog_id, []):
+                item.setdefault("relationships", {})["catalog"] = {"data": [song]}
+        logging.debug(
+            "Resolved catalog metadata for %d/%d Apple Music library item(s)",
+            len(songs),
+            len(pending),
+        )
 
     async def get_catalog_playlist(self, storefront: str, playlist_id: str) -> Optional[dict]:
         """Fetch a public catalog playlist by ID."""
@@ -427,7 +492,7 @@ class AppleMusicClient:
                 return data[0].get("id")
             return None
         except AppleMusicAPIError as e:
-            logging.error(f"Failed to create playlist '{name}': {e}")
+            logging.error("Failed to create playlist '%s': %s", name, e)
             return None
 
     async def add_tracks_to_library_playlist(
@@ -457,7 +522,7 @@ class AppleMusicClient:
             )
             return True
         except AppleMusicAPIError as e:
-            logging.error(f"Failed to add tracks to playlist {playlist_id}: {e}")
+            logging.error("Failed to add tracks to playlist %s: %s", playlist_id, e)
             return False
 
     async def delete_library_playlist(self, playlist_id: str) -> bool:
@@ -475,8 +540,9 @@ class AppleMusicClient:
         # Apple Music API doesn't support playlist deletion via the API
         # Users must delete playlists manually in the Apple Music app
         logging.warning(
-            f"Apple Music API doesn't support playlist deletion. "
-            f"Playlist {playlist_id} cannot be deleted programmatically."
+            "Apple Music API doesn't support playlist deletion. "
+            "Playlist %s cannot be deleted programmatically.",
+            playlist_id,
         )
         return False
 
@@ -491,31 +557,45 @@ class AppleMusicAPIError(Exception):
     pass
 
 
+def _catalog_attributes(track_data: dict) -> dict:
+    """Attributes of the catalog song attached via `include=catalog`, if any."""
+    catalog = ((track_data.get("relationships") or {}).get("catalog") or {}).get("data") or []
+    if not catalog:
+        return {}
+    return (catalog[0] or {}).get("attributes") or {}
+
+
+def _is_song(track_data: dict) -> bool:
+    return (track_data or {}).get("type", "songs") in SONG_TYPES
+
+
 def _extract_track_metadata(track_data: dict) -> Track:
-    """Extract Track metadata from Apple Music API response."""
+    """Extract Track metadata from an Apple Music library or catalog song.
+
+    Library songs lack ISRC/URL/genre details; those are read from the linked
+    catalog song when present.
+    """
     attributes = track_data.get("attributes", {})
+    catalog = _catalog_attributes(track_data)
     
     title = attributes.get("name", "Unknown")
     artist = attributes.get("artistName", "Unknown")
     album = attributes.get("albumName", "Unknown")
     
-    # Build Apple Music URL if catalog ID is available
-    url = ""
-    if "playParams" in attributes:
+    url = attributes.get("url") or catalog.get("url") or ""
+    if not url and "playParams" in attributes:
         catalog_id = attributes["playParams"].get("catalogId", "")
         if catalog_id:
             url = f"https://music.apple.com/song/{catalog_id}"
     
-    # Extract year from release date
-    release_date = attributes.get("releaseDate", "")
+    release_date = attributes.get("releaseDate") or catalog.get("releaseDate") or ""
     year = release_date[:4] if release_date else ""
     
-    # Genre
-    genre = attributes.get("genreNames", [""])[0] if attributes.get("genreNames") else ""
+    genre_names = attributes.get("genreNames") or catalog.get("genreNames") or []
+    genre = genre_names[0] if genre_names else ""
     
-    # Extract ISRC - Apple Music provides this in attributes
-    isrc = attributes.get("isrc")
-    duration_ms = attributes.get("durationInMillis")
+    isrc = attributes.get("isrc") or catalog.get("isrc")
+    duration_ms = attributes.get("durationInMillis") or catalog.get("durationInMillis")
     
     return Track(
         title=title,
@@ -591,7 +671,8 @@ async def _get_am_tracks_from_playlist(
     try:
         raw_tracks = await client.get_playlist_tracks(playlist.id)
         for track_data in raw_tracks:
-            tracks.append(_extract_track_metadata(track_data))
+            if _is_song(track_data):
+                tracks.append(_extract_track_metadata(track_data))
         logging.info(
             "Fetched %d tracks from Apple Music playlist '%s'",
             len(tracks),
@@ -615,7 +696,8 @@ async def _get_am_library_songs(client: AppleMusicClient) -> List[Track]:
     try:
         raw_songs = await client.get_library_songs()
         for song_data in raw_songs:
-            tracks.append(_extract_track_metadata(song_data))
+            if _is_song(song_data):
+                tracks.append(_extract_track_metadata(song_data))
         logging.info("Fetched %d library songs from Apple Music", len(tracks))
     except AppleMusicAuthError as e:
         logging.error("Apple Music authentication error: %s", e)
@@ -657,7 +739,8 @@ async def _get_am_public_tracks_from_playlist(
     try:
         raw_tracks = await client.get_catalog_playlist_tracks(storefront, playlist.id)
         for track_data in raw_tracks:
-            tracks.append(_extract_track_metadata(track_data))
+            if _is_song(track_data):
+                tracks.append(_extract_track_metadata(track_data))
         logging.info(
             "Fetched %d tracks from Apple Music public playlist '%s'",
             len(tracks),
@@ -722,6 +805,7 @@ class AppleMusicProvider(MusicServiceProvider):
             retry_backoff_seconds=(
                 user_inputs.apple_music_retry_backoff_seconds or 1.0
             ),
+            storefront=user_inputs.apple_music_storefront,
         )
     
     async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:

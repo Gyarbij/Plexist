@@ -76,6 +76,17 @@ class PlexistSettings(BaseSettings):
     spotify_user_id: Optional[str] = Field(
         default=None, validation_alias="SPOTIFY_USER_ID"
     )
+    # Spotify rejects `localhost`; loopback IP literals are required for http redirects.
+    spotify_redirect_uri: str = Field(
+        default="http://127.0.0.1:8888/callback",
+        validation_alias="SPOTIFY_REDIRECT_URI",
+    )
+    spotify_cache_path: Optional[str] = Field(
+        default=None, validation_alias="SPOTIFY_CACHE_PATH"
+    )
+    spotify_auth_response: Optional[str] = Field(
+        default=None, validation_alias="SPOTIFY_AUTH_RESPONSE"
+    )
 
     deezer_user_id: Optional[str] = Field(
         default=None, validation_alias="DEEZER_USER_ID"
@@ -214,6 +225,9 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         spotipy_client_id=settings.spotipy_client_id,
         spotipy_client_secret=settings.spotipy_client_secret,
         spotify_user_id=settings.spotify_user_id,
+        spotify_redirect_uri=settings.spotify_redirect_uri,
+        spotify_cache_path=settings.spotify_cache_path,
+        spotify_auth_response=settings.spotify_auth_response,
         deezer_user_id=settings.deezer_user_id,
         deezer_playlist_ids=settings.deezer_playlist_ids,
         deezer_access_token=settings.deezer_access_token,

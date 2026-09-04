@@ -40,8 +40,9 @@ services:
       # === Spotify ===
       # SPOTIFY_CLIENT_ID: your-client-id
       # SPOTIFY_CLIENT_SECRET: your-client-secret
-      # SPOTIFY_USER_ID: your-user-id
-      # SPOTIFY_REDIRECT_URI: http://localhost:8888/callback  # For liked tracks
+      # SPOTIFY_REDIRECT_URI: http://127.0.0.1:8888/callback  # Must match the Developer Dashboard (no "localhost")
+      # SPOTIFY_AUTH_RESPONSE:  # First run only: paste the redirected URL from the logged authorize link
+      # SPOTIFY_USER_ID: your-user-id  # Optional: only sync playlists owned by this user
       # SPOTIFY_CACHE_PATH: /app/data/.spotify_cache
 
       # === Deezer ===

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -52,7 +52,10 @@ class UserInputs:
 
     spotipy_client_id: Optional[str] = None
     spotipy_client_secret: Optional[str] = None
-    spotify_user_id: Optional[str] = None
+    spotify_user_id: Optional[str] = None  # Optional: only sync playlists owned by this user
+    spotify_redirect_uri: str = "http://127.0.0.1:8888/callback"
+    spotify_cache_path: Optional[str] = None  # Defaults to <DB dir>/.spotify_cache
+    spotify_auth_response: Optional[str] = None  # Redirected URL (or code) pasted after authorizing
 
     deezer_user_id: Optional[str] = None
     deezer_playlist_ids: Optional[str] = None

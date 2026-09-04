@@ -1,0 +1,11 @@
+# Ruff configuration: correctness-focused lint (syntax errors, pyflakes, lazy logging).
+target-version = "py312"
+line-length = 120
+extend-exclude = [".venv", "data"]
+
+[lint]
+select = [
+    "E9",   # syntax / IO errors
+    "F",    # pyflakes: undefined names, unused imports, etc.
+    "G004", # logging with f-strings (defeats lazy formatting)
+]

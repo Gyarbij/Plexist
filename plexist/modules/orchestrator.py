@@ -15,6 +15,7 @@ from typing import List, Optional, Tuple
 
 from .base import MusicServiceProvider, ServiceRegistry
 from .helperClasses import Playlist, Track, UserInputs
+from .plex import sync_liked_tracks_to_plex, update_or_create_plex_playlist
 
 
 @dataclass
@@ -96,8 +97,11 @@ class SyncOrchestrator:
     5. Report results
     """
     
-    def __init__(self, user_inputs: UserInputs):
+    def __init__(self, user_inputs: UserInputs, plex=None):
         self.user_inputs = user_inputs
+        # Shared PlexServer; when set, Plex destinations use the full Plex pipeline
+        # (cached matching, poster/description, missing-track exports, liked tracks).
+        self.plex = plex
         self._results: List[SyncResult] = []
     
     @property
@@ -268,6 +272,60 @@ class SyncOrchestrator:
             )
         
         return result
+
+    def _uses_plex_pipeline(self, destination: MusicServiceProvider) -> bool:
+        return destination.name == "plex" and self.plex is not None
+
+    async def _sync_playlist_to_plex(
+        self,
+        source: MusicServiceProvider,
+        destination: MusicServiceProvider,
+        playlist: Playlist,
+        tracks: List[Track],
+    ) -> SyncResult:
+        """Sync a playlist into Plex with the same behavior as the legacy Plex-centric path."""
+        result = SyncResult(
+            source=source.name,
+            destination=destination.name,
+            playlist_name=playlist.name,
+            total_tracks=len(tracks),
+            matched_tracks=0,
+            missing_tracks=0,
+            failed_tracks=0,
+            success=False,
+        )
+
+        if not tracks:
+            logging.warning(
+                "No tracks to sync for playlist '%s' from %s to %s",
+                playlist.name, source.name, destination.name
+            )
+            result.success = True
+            return result
+
+        try:
+            matched, missing = await update_or_create_plex_playlist(
+                self.plex, playlist, tracks, self.user_inputs
+            )
+            result.matched_tracks = matched
+            result.missing_tracks = missing
+            result.success = True
+        except Exception as e:
+            result.error = str(e)
+            logging.error(
+                "Failed to sync playlist '%s' from %s to %s: %s",
+                playlist.name, source.name, destination.name, e
+            )
+
+        return result
+
+    async def _sync_liked_tracks_to_plex(self, source: MusicServiceProvider) -> None:
+        logging.info("Syncing %s liked tracks to Plex ratings", source.name)
+        liked_tracks = await source.get_liked_tracks(self.user_inputs)
+        if not liked_tracks:
+            logging.warning("No liked tracks found in %s", source.name)
+            return
+        await sync_liked_tracks_to_plex(self.plex, liked_tracks, source.name, self.user_inputs)
     
     async def sync_pair(self, pair: SyncPair) -> List[SyncResult]:
         """Sync all playlists for a single source→destination pair.
@@ -298,10 +356,11 @@ class SyncOrchestrator:
             
             if not playlists:
                 logging.warning("No playlists found in %s", source.name)
-                return results
+            else:
+                logging.info("Found %d playlists in %s", len(playlists), source.name)
             
-            logging.info("Found %d playlists in %s", len(playlists), source.name)
-            
+            use_plex_pipeline = self._uses_plex_pipeline(destination)
+
             # Sync each playlist
             for playlist in playlists:
                 logging.info(
@@ -313,8 +372,14 @@ class SyncOrchestrator:
                 tracks = await source.get_tracks(playlist, self.user_inputs)
                 
                 # Sync to destination
-                result = await self.sync_playlist(source, destination, playlist, tracks)
+                if use_plex_pipeline:
+                    result = await self._sync_playlist_to_plex(source, destination, playlist, tracks)
+                else:
+                    result = await self.sync_playlist(source, destination, playlist, tracks)
                 results.append(result)
+
+            if use_plex_pipeline and self.user_inputs.sync_liked_tracks:
+                await self._sync_liked_tracks_to_plex(source)
             
         except Exception as e:
             logging.error(
@@ -388,6 +453,7 @@ class SyncOrchestrator:
 async def run_multi_service_sync(
     user_inputs: UserInputs,
     sync_pairs_str: Optional[str] = None,
+    plex=None,
 ) -> List[SyncResult]:
     """Convenience function to run multi-service sync.
     
@@ -395,6 +461,8 @@ async def run_multi_service_sync(
         user_inputs: User configuration
         sync_pairs_str: Comma-separated sync pairs (e.g., 'spotify:qobuz,tidal:plex')
             If not provided, uses SYNC_PAIRS from user_inputs
+        plex: Initialized PlexServer used for Plex destinations (enables liked-track
+            sync, posters/descriptions and missing-track exports)
             
     Returns:
         List of SyncResult objects
@@ -411,7 +479,7 @@ async def run_multi_service_sync(
         logging.warning("No valid sync pairs found in: %s", pairs_str)
         return []
     
-    orchestrator = SyncOrchestrator(user_inputs)
+    orchestrator = SyncOrchestrator(user_inputs, plex=plex)
     results = await orchestrator.sync_all(pairs)
     orchestrator.print_summary()
     

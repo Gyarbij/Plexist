@@ -21,6 +21,9 @@ def test_settings_from_environment(monkeypatch):
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "spid")
     monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "spsecret")
     monkeypatch.setenv("SPOTIFY_USER_ID", "spuser")
+    monkeypatch.setenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:9999/cb")
+    monkeypatch.setenv("SPOTIFY_CACHE_PATH", "/tmp/spotify-cache")
+    monkeypatch.setenv("SPOTIFY_AUTH_RESPONSE", "http://127.0.0.1:9999/cb?code=abc")
     monkeypatch.setenv("DEEZER_USER_ID", "dzuser")
     monkeypatch.setenv("DEEZER_PLAYLIST_ID", "1 2 3")
     # Apple Music settings
@@ -52,6 +55,9 @@ def test_settings_from_environment(monkeypatch):
     assert user_inputs.spotipy_client_id == "spid"
     assert user_inputs.spotipy_client_secret == "spsecret"
     assert user_inputs.spotify_user_id == "spuser"
+    assert user_inputs.spotify_redirect_uri == "http://127.0.0.1:9999/cb"
+    assert user_inputs.spotify_cache_path == "/tmp/spotify-cache"
+    assert user_inputs.spotify_auth_response == "http://127.0.0.1:9999/cb?code=abc"
     assert user_inputs.deezer_user_id == "dzuser"
     assert user_inputs.deezer_playlist_ids == "1 2 3"
     # Apple Music assertions

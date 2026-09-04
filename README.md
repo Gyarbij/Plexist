@@ -20,7 +20,7 @@
 | **Auto Updates** | Keeps playlists in sync with your streaming services |
 | **New Playlists** | Automatically creates Plex playlists when added to your streaming service |
 | **Liked Tracks** | Syncs favorited tracks to Plex as 5-star ratings (appears in "Liked Tracks" smart playlist) |
-| **ISRC + MBID Matching** | Uses ISRC codes and MusicBrainz MBID proxy matching, then falls back to fuzzy matching |
+| **ISRC + MBID Matching** | Uses ISRC codes, MusicBrainz MBID proxy matching, and Plex's native matcher before fuzzy matching |
 
 ### Supported Services
 
@@ -67,7 +67,7 @@ SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 1. **Fetches playlists** from the source service
 2. **Matches tracks** in the destination using:
   - **ISRC codes** (International Standard Recording Code) for exact matching
-  - **MusicBrainz MBID proxy** (ISRC → MusicBrainz → Plex MBID index)
+  - **MusicBrainz MBID proxy** (ISRC → MusicBrainz → Plex MBID index, then Plex native matching)
   - **Metadata fallback** (title/artist/album) when ISRC/MBID unavailable
 3. **Creates or updates** playlists in the destination service
 4. **Reports results** including matched, missing, and failed tracks

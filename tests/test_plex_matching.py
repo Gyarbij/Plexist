@@ -142,6 +142,99 @@ class TestMatchStages:
         assert match is isrc_hit and missing is None
         offline_plex.library.search.assert_called_once_with(libtype="track", **{"track.guid": "isrc://USRC17607839"})
 
+    async def test_mbid_proxy_uses_native_library_matches_when_index_misses(
+        self, cache, offline_plex, monkeypatch
+    ):
+        cache()
+        monkeypatch.setattr(plex, "musicbrainz_enabled", True)
+        mbid = "62a4c2b3-9acd-4c92-b199-94204a942308"
+        monkeypatch.setattr(
+            plex.musicbrainz,
+            "get_mbids_for_isrc_with_scores",
+            AsyncMock(
+                return_value=[
+                    plex.musicbrainz.ScoredMBID(
+                        mbid=mbid,
+                        mbid_type=plex.musicbrainz.MBIDType.RELEASE_TRACK,
+                        confidence=0.9,
+                    )
+                ]
+            ),
+        )
+        response = ET.Element("MediaContainer")
+        ET.SubElement(response, "Track", attrib={"ratingKey": "9", "score": "100"})
+        offline_plex.query.return_value = response
+        native_hit = live_track(9, "Hello World", "Artist", "Album", guids=[f"mbid://{mbid}"])
+        offline_plex.fetchItem.return_value = native_hit
+
+        match, missing = await _match_single_track(
+            offline_plex, wanted(isrc="USRC17607839")
+        )
+
+        assert match is native_hit and missing is None
+        offline_plex.query.assert_called_once_with(
+            "/library/matches",
+            params={
+                "type": 10,
+                "guid": f"mbid://{mbid}",
+                "title": "Hello World",
+                "grandparentTitle": "Artist",
+                "parentTitle": "Album",
+                "includeFullMetadata": 0,
+            },
+        )
+        offline_plex.fetchItem.assert_called_once_with(9)
+
+    async def test_mbid_proxy_prefers_local_index_over_native_matcher(
+        self, cache, offline_plex, monkeypatch
+    ):
+        cache()
+        monkeypatch.setattr(plex, "musicbrainz_enabled", True)
+        mbid = "62a4c2b3-9acd-4c92-b199-94204a942308"
+        indexed = cached(9, "Hello World", "Artist", "Album", mbids=(mbid,))
+        plex.plex_mbid_index[mbid] = {
+            "plex_id": 9,
+            "track_key": indexed.cache_key,
+            "track": indexed,
+        }
+        monkeypatch.setattr(
+            plex.musicbrainz,
+            "get_mbids_for_isrc_with_scores",
+            AsyncMock(
+                return_value=[
+                    plex.musicbrainz.ScoredMBID(
+                        mbid=mbid,
+                        mbid_type=plex.musicbrainz.MBIDType.RELEASE_TRACK,
+                        confidence=0.9,
+                    )
+                ]
+            ),
+        )
+
+        match, missing = await _match_single_track(
+            offline_plex, wanted(isrc="USRC17607839")
+        )
+
+        assert match is indexed and missing is None
+        offline_plex.query.assert_not_called()
+
+    async def test_native_library_match_rejects_non_positive_score(
+        self, cache, offline_plex
+    ):
+        cache()
+        response = ET.Element("MediaContainer")
+        ET.SubElement(response, "Track", attrib={"ratingKey": "9", "score": "85"})
+        offline_plex.query.return_value = response
+
+        match = await plex._match_via_library_matches(
+            offline_plex,
+            wanted(isrc="USRC17607839"),
+            "mbid://62a4c2b3-9acd-4c92-b199-94204a942308",
+        )
+
+        assert match is None
+        offline_plex.fetchItem.assert_not_called()
+
     async def test_exact_normalized_match_uses_cache_only(self, cache, offline_plex):
         cache(cached(1, "Héllo, World!", "The Artist", "Album"))
 

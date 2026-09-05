@@ -321,12 +321,20 @@ class TestCreateAuthenticatedSession:
             mock_session.check_login = MagicMock(return_value=True)
             MockSession.return_value = mock_session
             
-            with patch("modules.tidal._with_retries", new_callable=AsyncMock) as mock_with_retries:
-                mock_with_retries.side_effect = [True, True]  # load_oauth_session, check_login
+            async def run_operation(operation, *_args):
+                return await operation()
+
+            with patch("modules.tidal._with_retries", side_effect=run_operation):
                 
                 session = await _create_authenticated_session(mock_user_inputs)
         
         assert session is not None
+        mock_session.load_oauth_session.assert_called_once_with(
+            "Bearer",
+            "test-access-token",
+            "test-refresh-token",
+            datetime(2025, 12, 31, 23, 59, 59),
+        )
 
     @pytest.mark.asyncio
     async def test_create_session_without_access_token(self, mock_user_inputs_unconfigured):

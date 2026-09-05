@@ -26,6 +26,8 @@ from .base import ServiceRegistry, MusicServiceProvider
 from .helperClasses import Playlist, Track, UserInputs
 from .plex import update_or_create_plex_playlist, sync_liked_tracks_to_plex
 
+TIDAL_OAUTH_TOKEN_TYPE = "Bearer"
+
 
 class TidalAuthError(Exception):
     """Authentication error with Tidal API."""
@@ -150,7 +152,7 @@ async def _create_authenticated_session(user_inputs: UserInputs) -> Optional[Any
         success = await _with_retries(
             lambda: asyncio.to_thread(
                 session.load_oauth_session,
-                tidalapi.SessionType.TIDAL,  # type: ignore[attr-defined]
+                TIDAL_OAUTH_TOKEN_TYPE,
                 access_token,
                 refresh_token,
                 token_expiry,

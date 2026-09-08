@@ -5,7 +5,7 @@ from typing import Annotated, Any, Optional
 from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from modules.helperClasses import UserInputs
+from .modules.helperClasses import UserInputs
 
 
 def parse_flexible_bool(value: Any) -> bool:

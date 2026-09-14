@@ -4,7 +4,7 @@ aiohappyeyeballs==2.7.1
     # via aiohttp
 aiohttp==3.14.3
     # via -r requirements.in
-aiolimiter==1.2.1
+aiolimiter==1.3.0
     # via -r requirements.in
 aiosignal==1.4.0
     # via aiohttp

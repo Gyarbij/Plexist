@@ -99,6 +99,14 @@ def _extract_mbids_from_guids(guids) -> List[str]:
     return list(dict.fromkeys(mbids))
 
 
+def _loaded_attr(obj, name: str, default=None):
+    """Read an attribute while bypassing plexapi's auto-reload (an HTTP request per partial object)."""
+    try:
+        return object.__getattribute__(obj, name)
+    except AttributeError:
+        return default
+
+
 @dataclass(frozen=True)
 class CachedTrack:
     """Network-free snapshot of a Plex track used by the in-memory matching indexes.
@@ -133,11 +141,8 @@ class CachedTrack:
 
     @classmethod
     def from_plex(cls, track) -> "CachedTrack":
-        # vars() returns already-loaded attributes without plexapi's auto-reload requests.
-        data = vars(track)
-
         def attr(name, default=None):
-            return data[name] if name in data else getattr(track, name, default)
+            return _loaded_attr(track, name, default)
 
         rating_key = attr("ratingKey")
         return cls(
@@ -1230,9 +1235,10 @@ class PlexProvider(MusicServiceProvider):
         return self._server
     
     async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
-        """Fetch music playlists from Plex, honoring PLEX_PLAYLIST_INCLUDE/EXCLUDE."""
+        """Fetch music playlists from Plex, applying the PLEX_PLAYLIST_* filters."""
         include = _playlist_name_set(user_inputs.plex_playlist_include)
         exclude = _playlist_name_set(user_inputs.plex_playlist_exclude)
+        max_tracks = user_inputs.plex_playlist_max_tracks
         try:
             plex = self._get_server(user_inputs)
             await _acquire_rate_limit()
@@ -1248,6 +1254,12 @@ class PlexProvider(MusicServiceProvider):
                         continue
                     if include and key not in include:
                         logging.info("Skipping Plex playlist '%s' (not listed in PLEX_PLAYLIST_INCLUDE)", pl.title)
+                        continue
+                    if max_tracks > 0 and (pl.leafCount or 0) > max_tracks:
+                        logging.info(
+                            "Skipping Plex playlist '%s': %d tracks exceeds PLEX_PLAYLIST_MAX_TRACKS=%d",
+                            pl.title, pl.leafCount, max_tracks,
+                        )
                         continue
                     poster = ""
                     try:
@@ -1287,27 +1299,22 @@ class PlexProvider(MusicServiceProvider):
             tracks = []
             for item in items:
                 if hasattr(item, "title"):
-                    # Try to extract ISRC from Plex metadata if available
+                    snapshot = CachedTrack.from_plex(item)
                     isrc = None
-                    try:
-                        # Plex stores ISRC in the guid or external IDs if available
-                        if hasattr(item, "guids"):
-                            for guid in item.guids:
-                                if guid.id and guid.id.startswith("isrc://"):
-                                    isrc = guid.id.replace("isrc://", "")
-                                    break
-                    except Exception:
-                        pass
+                    for guid in _loaded_attr(item, "guids") or []:
+                        if guid.id and guid.id.startswith("isrc://"):
+                            isrc = guid.id.replace("isrc://", "")
+                            break
                     
                     tracks.append(Track(
-                        title=item.title,
-                        artist=item.artist().title if hasattr(item, "artist") else "Unknown",
-                        album=item.album().title if hasattr(item, "album") else "Unknown",
+                        title=snapshot.title,
+                        artist=snapshot.artist,
+                        album=snapshot.album,
                         url="",
-                        year=str(item.year) if hasattr(item, "year") and item.year else "",
-                        genre=item.genres[0].tag if hasattr(item, "genres") and item.genres else "",
+                        year=str(snapshot.year) if snapshot.year else "",
+                        genre=snapshot.genres[0] if snapshot.genres else "",
                         isrc=isrc,
-                        duration_ms=item.duration if hasattr(item, "duration") else None,
+                        duration_ms=snapshot.duration_ms,
                     ))
             
             logging.info(

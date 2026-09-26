@@ -2,7 +2,9 @@
 import pathlib
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
+from xml.etree import ElementTree as ET
 
+import plexapi.audio
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "plexist"))
@@ -238,28 +240,30 @@ class TestPlexProviderServerCaching:
         match.assert_awaited_once()
 
 
-PLEX_PLAYLIST_TITLES = ["❤️ Tracks", "📡 Recently Added", "All Music", "Dutch Excellence"]
+PLEX_PLAYLIST_SIZES = {"❤️ Tracks": 19, "📡 Recently Added": 9765, "All Music": 20000, "Dutch Excellence": 150}
 
 
 class TestPlexSourcePlaylistFilters:
     @pytest.mark.parametrize(
         ("filters", "expected"),
         [
-            ({}, PLEX_PLAYLIST_TITLES),
+            ({}, list(PLEX_PLAYLIST_SIZES)),
             ({"plex_playlist_exclude": " 📡 recently added , ALL MUSIC,"}, ["❤️ Tracks", "Dutch Excellence"]),
             ({"plex_playlist_include": "❤️ Tracks,Dutch Excellence"}, ["❤️ Tracks", "Dutch Excellence"]),
             (
                 {"plex_playlist_include": "❤️ Tracks,Dutch Excellence", "plex_playlist_exclude": "dutch excellence"},
                 ["❤️ Tracks"],
             ),
+            ({"plex_playlist_max_tracks": 5000}, ["❤️ Tracks", "Dutch Excellence"]),
+            ({"plex_playlist_max_tracks": 150}, ["❤️ Tracks", "Dutch Excellence"]),
         ],
     )
     async def test_filtered_playlists_are_skipped_before_fetching_tracks(self, filters, expected, caplog):
         _register(PlexProvider, OtherDestination)
         server = MagicMock()
         server.playlists.return_value = [
-            MagicMock(title=title, playlistType="audio", ratingKey=i, summary="", thumb=None)
-            for i, title in enumerate(PLEX_PLAYLIST_TITLES)
+            MagicMock(title=title, playlistType="audio", ratingKey=i, summary="", thumb=None, leafCount=size)
+            for i, (title, size) in enumerate(PLEX_PLAYLIST_SIZES.items())
         ] + [MagicMock(title="Movies", playlistType="video")]
         inputs = UserInputs(plex_url="http://plex:32400", plex_token="tok", **filters)
 
@@ -270,5 +274,38 @@ class TestPlexSourcePlaylistFilters:
 
         assert [r.playlist_name for r in results] == expected
         assert [c.args[0] for c in server.playlist.call_args_list] == expected
-        for title in set(PLEX_PLAYLIST_TITLES) - set(expected):
+        for title in set(PLEX_PLAYLIST_SIZES) - set(expected):
             assert f"Skipping Plex playlist '{title}'" in caplog.text
+
+
+def _plex_playlist_item(server, rating_key, guids=(), **attrib):
+    element = ET.Element("Track", attrib={
+        "ratingKey": str(rating_key), "key": f"/library/metadata/{rating_key}", "type": "track",
+        "grandparentTitle": "Artist", "parentTitle": "Album", **attrib,
+    })
+    for guid in guids:
+        ET.SubElement(element, "Guid", attrib={"id": guid})
+    return plexapi.audio.Track(server, element, initpath="/playlists/9/items")
+
+
+class TestPlexSourceTracks:
+    async def test_tracks_are_built_without_per_track_requests(self):
+        server = MagicMock(name="PlexServer")
+        server.playlist.return_value.items.return_value = [
+            _plex_playlist_item(server, 1, title="Song", year="2020", duration="200000", guids=["isrc://USRC17607839"]),
+            _plex_playlist_item(server, 2, title="Other"),
+        ]
+
+        with patch("modules.plex.PlexServer", return_value=server), patch(
+            "modules.plex._acquire_rate_limit", new_callable=AsyncMock
+        ):
+            tracks = await PlexProvider().get_tracks(
+                PLAYLIST, UserInputs(plex_url="http://plex:32400", plex_token="tok")
+            )
+
+        server.query.assert_not_called()
+        assert tracks == [
+            Track(title="Song", artist="Artist", album="Album", url="", year="2020", genre="",
+                  isrc="USRC17607839", duration_ms=200000),
+            Track(title="Other", artist="Artist", album="Album", url="", year="", genre=""),
+        ]

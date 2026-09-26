@@ -113,6 +113,9 @@ class PlexistSettings(BaseSettings):
     plex_playlist_exclude: Optional[str] = Field(
         default=None, validation_alias="PLEX_PLAYLIST_EXCLUDE"
     )
+    plex_playlist_max_tracks: int = Field(
+        default=0, validation_alias="PLEX_PLAYLIST_MAX_TRACKS"
+    )
 
     # Apple Music settings
     apple_music_team_id: Optional[str] = Field(
@@ -231,6 +234,7 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         sync_pairs=settings.sync_pairs,
         plex_playlist_include=settings.plex_playlist_include,
         plex_playlist_exclude=settings.plex_playlist_exclude,
+        plex_playlist_max_tracks=settings.plex_playlist_max_tracks,
         spotipy_client_id=settings.spotipy_client_id,
         spotipy_client_secret=settings.spotipy_client_secret,
         spotify_user_id=settings.spotify_user_id,

@@ -20,6 +20,7 @@ def test_settings_from_environment(monkeypatch):
     monkeypatch.setenv("SYNC_LIKED_TRACKS", "1")
     monkeypatch.setenv("PLEX_PLAYLIST_INCLUDE", "❤️ Tracks,Dutch Excellence")
     monkeypatch.setenv("PLEX_PLAYLIST_EXCLUDE", "📡 Recently Added")
+    monkeypatch.setenv("PLEX_PLAYLIST_MAX_TRACKS", "5000")
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "spid")
     monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "spsecret")
     monkeypatch.setenv("SPOTIFY_USER_ID", "spuser")
@@ -56,6 +57,7 @@ def test_settings_from_environment(monkeypatch):
     assert user_inputs.sync_liked_tracks is True
     assert user_inputs.plex_playlist_include == "❤️ Tracks,Dutch Excellence"
     assert user_inputs.plex_playlist_exclude == "📡 Recently Added"
+    assert user_inputs.plex_playlist_max_tracks == 5000
     assert user_inputs.spotipy_client_id == "spid"
     assert user_inputs.spotipy_client_secret == "spsecret"
     assert user_inputs.spotify_user_id == "spuser"

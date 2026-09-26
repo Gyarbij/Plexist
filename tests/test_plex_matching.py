@@ -103,6 +103,15 @@ class TestCachedTrack:
         assert snapshot.cache_key == "Hello World|Artist|Album"
         assert snapshot.primary_mbid == "62a4c2b3-9acd-4c92-b199-94204a942308"
 
+    def test_from_plex_never_reloads_partial_tracks(self):
+        track = live_track(7, "Song", "Artist", "Album")
+
+        with patch.object(plexapi.audio.Track, "_reload") as reload:
+            snapshot = CachedTrack.from_plex(track)
+
+        reload.assert_not_called()
+        assert snapshot == cached(7, "Song", "Artist", "Album")
+
     def test_indexes_are_built_from_snapshots(self, cache):
         cache(cached(1, "Hello World", "Artist", "Album", duration_ms=200000))
 

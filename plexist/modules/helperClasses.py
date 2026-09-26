@@ -50,6 +50,11 @@ class UserInputs:
     # Each pair defines source:destination for playlist sync
     sync_pairs: Optional[str] = None
 
+    # Plex-as-source playlist filters: comma-separated playlist names (case-insensitive)
+    plex_playlist_include: Optional[str] = None
+    plex_playlist_exclude: Optional[str] = None
+    plex_playlist_max_tracks: int = 0  # 0 = no limit
+
     spotipy_client_id: Optional[str] = None
     spotipy_client_secret: Optional[str] = None
     spotify_user_id: Optional[str] = None  # Optional: only sync playlists owned by this user

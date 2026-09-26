@@ -31,6 +31,8 @@ services:
       ADD_PLAYLIST_DESCRIPTION: yes
       APPEND_INSTEAD_OF_SYNC: no
       SYNC_LIKED_TRACKS: no
+      # PLEX_PLAYLIST_INCLUDE: "❤️ Tracks,Dutch Excellence"  # Plex as SYNC_PAIRS source: sync just these
+      # PLEX_PLAYLIST_EXCLUDE: "📡 Recently Added,All Music"  # Plex as SYNC_PAIRS source: never sync these
 
       # === Performance Tuning ===
       # Lower these values for slower servers (Synology, Raspberry Pi, etc.)

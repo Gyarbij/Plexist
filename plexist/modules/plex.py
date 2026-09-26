@@ -8,7 +8,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import aiosqlite
 import plexapi
@@ -1195,6 +1195,11 @@ async def sync_liked_tracks_to_plex(
 # Plex Provider (for multi-service sync support)
 # ============================================================
 
+def _playlist_name_set(value: Optional[str]) -> Set[str]:
+    """Parse a comma-separated PLEX_PLAYLIST_INCLUDE/EXCLUDE value for case-insensitive matching."""
+    return {name.strip().casefold() for name in (value or "").split(",") if name.strip()}
+
+
 @ServiceRegistry.register
 class PlexProvider(MusicServiceProvider):
     """Plex provider for multi-service sync.
@@ -1225,7 +1230,9 @@ class PlexProvider(MusicServiceProvider):
         return self._server
     
     async def get_playlists(self, user_inputs: UserInputs) -> List[Playlist]:
-        """Fetch all playlists from Plex library."""
+        """Fetch music playlists from Plex, honoring PLEX_PLAYLIST_INCLUDE/EXCLUDE."""
+        include = _playlist_name_set(user_inputs.plex_playlist_include)
+        exclude = _playlist_name_set(user_inputs.plex_playlist_exclude)
         try:
             plex = self._get_server(user_inputs)
             await _acquire_rate_limit()
@@ -1235,6 +1242,13 @@ class PlexProvider(MusicServiceProvider):
             for pl in plex_playlists:
                 # Only include music playlists
                 if pl.playlistType == "audio":
+                    key = pl.title.strip().casefold()
+                    if key in exclude:
+                        logging.info("Skipping Plex playlist '%s' (listed in PLEX_PLAYLIST_EXCLUDE)", pl.title)
+                        continue
+                    if include and key not in include:
+                        logging.info("Skipping Plex playlist '%s' (not listed in PLEX_PLAYLIST_INCLUDE)", pl.title)
+                        continue
                     poster = ""
                     try:
                         if hasattr(pl, "thumb") and pl.thumb:

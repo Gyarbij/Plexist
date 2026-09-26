@@ -62,6 +62,16 @@ SYNC_PAIRS=tidal:plex
 SYNC_PAIRS=spotify:qobuz,tidal:plex,deezer:tidal
 ```
 
+When Plex is the source (e.g., `plex:tidal`), every Plex music playlist is synced by default. Limit this with comma-separated, case-insensitive playlist names; filtered playlists are skipped before their tracks are fetched:
+
+```env
+# Skip large or automatically generated playlists
+PLEX_PLAYLIST_EXCLUDE=📡 Recently Added,All Music
+
+# Or only sync these playlists (PLEX_PLAYLIST_EXCLUDE still wins)
+PLEX_PLAYLIST_INCLUDE=❤️ Tracks,Dutch Excellence
+```
+
 #### How It Works
 
 1. **Fetches playlists** from the source service
@@ -354,6 +364,8 @@ All boolean options accept flexible values (case-insensitive):
 | `APPEND_INSTEAD_OF_SYNC` | `no` | `no` = Full sync, `yes` = Append only (no removals) |
 | `SYNC_LIKED_TRACKS` | `no` | Sync liked tracks to Plex 5-star ratings |
 | `SYNC_PAIRS` | — | Multi-service sync pairs (e.g., `spotify:qobuz,tidal:plex`) |
+| `PLEX_PLAYLIST_INCLUDE` | — | Plex source only: sync just these playlists (comma-separated, case-insensitive) |
+| `PLEX_PLAYLIST_EXCLUDE` | — | Plex source only: never sync these playlists; wins over `PLEX_PLAYLIST_INCLUDE` |
 
 #### Output Options
 
@@ -482,6 +494,8 @@ services:
       APPEND_INSTEAD_OF_SYNC: no
       SYNC_LIKED_TRACKS: no
       # SYNC_PAIRS: spotify:qobuz,tidal:plex  # Multi-service sync (optional)
+      # PLEX_PLAYLIST_INCLUDE: "❤️ Tracks,Dutch Excellence"  # Plex source only: sync just these
+      # PLEX_PLAYLIST_EXCLUDE: "📡 Recently Added,All Music"  # Plex source only: never sync these
 
       # === Performance ===
       MAX_REQUESTS_PER_SECOND: 5

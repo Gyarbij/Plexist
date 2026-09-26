@@ -3,6 +3,8 @@ import pathlib
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "plexist"))
 
 from modules.base import MusicServiceProvider, ServiceRegistry  # noqa: E402
@@ -234,3 +236,39 @@ class TestPlexProviderServerCaching:
 
         assert rating_key == "42"
         match.assert_awaited_once()
+
+
+PLEX_PLAYLIST_TITLES = ["❤️ Tracks", "📡 Recently Added", "All Music", "Dutch Excellence"]
+
+
+class TestPlexSourcePlaylistFilters:
+    @pytest.mark.parametrize(
+        ("filters", "expected"),
+        [
+            ({}, PLEX_PLAYLIST_TITLES),
+            ({"plex_playlist_exclude": " 📡 recently added , ALL MUSIC,"}, ["❤️ Tracks", "Dutch Excellence"]),
+            ({"plex_playlist_include": "❤️ Tracks,Dutch Excellence"}, ["❤️ Tracks", "Dutch Excellence"]),
+            (
+                {"plex_playlist_include": "❤️ Tracks,Dutch Excellence", "plex_playlist_exclude": "dutch excellence"},
+                ["❤️ Tracks"],
+            ),
+        ],
+    )
+    async def test_filtered_playlists_are_skipped_before_fetching_tracks(self, filters, expected, caplog):
+        _register(PlexProvider, OtherDestination)
+        server = MagicMock()
+        server.playlists.return_value = [
+            MagicMock(title=title, playlistType="audio", ratingKey=i, summary="", thumb=None)
+            for i, title in enumerate(PLEX_PLAYLIST_TITLES)
+        ] + [MagicMock(title="Movies", playlistType="video")]
+        inputs = UserInputs(plex_url="http://plex:32400", plex_token="tok", **filters)
+
+        with patch("modules.plex.PlexServer", return_value=server), patch(
+            "modules.plex._acquire_rate_limit", new_callable=AsyncMock
+        ), caplog.at_level("INFO"):
+            results = await SyncOrchestrator(inputs).sync_pair(SyncPair("plex", "other"))
+
+        assert [r.playlist_name for r in results] == expected
+        assert [c.args[0] for c in server.playlist.call_args_list] == expected
+        for title in set(PLEX_PLAYLIST_TITLES) - set(expected):
+            assert f"Skipping Plex playlist '{title}'" in caplog.text

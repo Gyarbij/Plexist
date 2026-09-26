@@ -106,6 +106,13 @@ class PlexistSettings(BaseSettings):
     sync_pairs: Optional[str] = Field(
         default=None, validation_alias="SYNC_PAIRS"
     )
+    # Plex-as-source playlist filters: comma-separated playlist names (case-insensitive)
+    plex_playlist_include: Optional[str] = Field(
+        default=None, validation_alias="PLEX_PLAYLIST_INCLUDE"
+    )
+    plex_playlist_exclude: Optional[str] = Field(
+        default=None, validation_alias="PLEX_PLAYLIST_EXCLUDE"
+    )
 
     # Apple Music settings
     apple_music_team_id: Optional[str] = Field(
@@ -222,6 +229,8 @@ def build_user_inputs(settings: PlexistSettings) -> UserInputs:
         plex_duration_bucket_seconds=settings.plex_duration_bucket_seconds,
         sync_liked_tracks=settings.sync_liked_tracks,
         sync_pairs=settings.sync_pairs,
+        plex_playlist_include=settings.plex_playlist_include,
+        plex_playlist_exclude=settings.plex_playlist_exclude,
         spotipy_client_id=settings.spotipy_client_id,
         spotipy_client_secret=settings.spotipy_client_secret,
         spotify_user_id=settings.spotify_user_id,

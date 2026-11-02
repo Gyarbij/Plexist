@@ -13,7 +13,7 @@ pytest==9.1.1
     #   -r requirements-dev.in
     #   pytest-asyncio
     #   pytest-mock
-pytest-asyncio==1.4.0
+pytest-asyncio==1.4.1
     # via -r requirements-dev.in
 pytest-mock==3.17.0
     # via -r requirements-dev.in

@@ -63,11 +63,11 @@ pyaes==1.6.1
     # via tidalapi
 pycparser==3.12
     # via cffi
-pydantic==2.14.1
+pydantic==2.14.2
     # via
     #   -r requirements.in
     #   pydantic-settings
-pydantic-core==2.50.1
+pydantic-core==2.50.2
     # via
     #   -r requirements.in
     #   pydantic
